@@ -1,0 +1,21 @@
+[project]
+name = "mqtt_coap_module"
+version = "0.1.0"
+description = "A Python module for MQTT communication inspired by CoAP, with async support and microcontroller compatibility."
+authors = [{ name = "Your Name", email = "your.email@example.com" }]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "paho-mqtt>=1.6.1",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+# testpaths = ["tests"]
+pythonpath = ["src"]
