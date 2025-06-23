@@ -2,131 +2,153 @@ import asyncio
 import json
 import uuid
 from typing import Optional, Dict, Any, Callable, Awaitable
-import paho.mqtt.client as mqtt
-from paho.mqtt.client import CallbackAPIVersion
-from src.payload_handler import Method, PayloadHandler
 
+from aiomqtt import Client
+from src.payload_handler import Method, PayloadHandler
+from src.topic_manager import TopicManager
 
 class MQTTClient:
-    def __init__(self, broker: str, port: int = 1883, timeout: int = 5):
+    def __init__(self, broker: str, port: int = 1883, timeout: int = 5, identifier: Optional[str] = None, subscriptions: Optional[list] = None):
         self.broker = broker
         self.port = port
-        self.client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        self.client.on_connect = self.on_connect
-        self.client.on_message = self.on_message
-        self.is_connected = False
-        self.loop = asyncio.get_event_loop()
         self.timeout = timeout
+        self._username: Optional[str] = None
+        self._password: Optional[str] = None
+        self.identifier = identifier if identifier else f"mqtt_client_{uuid.uuid4()}"
 
+        self._client: Optional[Client] = None
+        self._client_task: Optional[asyncio.Task] = None
         self._pending_requests: Dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
-
-        # For responding to incoming requests
         self._request_handler: Optional[Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = None
+        self._connected = asyncio.Event()
+        self._topic_manager = TopicManager()
+        self.subscriptions = subscriptions or []
 
-    def username_pw_set(self, username: str, password: str):
-        """Sets the MQTT client login credentials."""
-        self.client.username_pw_set(username, password)
+    def set_credentials(self, username: str, password: str):
+        self._username = username
+        self._password = password
 
     def set_request_handler(self, handler: Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]):
-        """Sets a coroutine handler to respond to requests."""
         self._request_handler = handler
 
-    def on_connect(self, client, userdata, connect_flags, rc, properties):
-        if rc == 0:
-            self.is_connected = True
-            print("Connected to MQTT broker")
-        else:
-            print(f"Connection failed with code {rc}")
-
-    def on_message(self, client, userdata, msg):
-        print(f"Received message on topic {msg.topic}: {msg.payload.decode()}")
-        coro = self._handle_message(msg.topic, msg.payload.decode())
-        asyncio.run_coroutine_threadsafe(coro, self.loop)
-
-    async def _handle_message(self, topic: str, payload_str: str):
-        try:
-            payload = json.loads(payload_str)
-            header = payload.get("header", {})
-
-            # If this is a response to a request
-            if "request_id" in header and "response_code" in header:
-                request_id = header["request_id"]
-                async with self._lock:
-                    future = self._pending_requests.pop(request_id, None)
-                if future and not future.done():
-                    future.set_result(payload)
-
-            # If this is an incoming request
-            elif "method" in header and self._request_handler:
-                request_id = header["request_id"]
-                response_topic = f"{topic}/{request_id}"
-                response = await self._request_handler(payload)
-                await self.publish(response_topic, response)
-
-        except json.JSONDecodeError:
-            print("Invalid JSON payload received")
-        except Exception as e:
-            print(f"Error in _handle_message: {e}")
-
     async def connect(self):
-        await self.loop.run_in_executor(None, self.client.connect, self.broker, self.port)
-        self.client.loop_start()
-        while not self.is_connected:
-            await asyncio.sleep(0.1)
+        self._client = Client(
+            hostname=self.broker,
+            port=self.port,
+            username=self._username,
+            password=self._password,
+            identifier=self.identifier
+        )
+        await self._client.__aenter__()  # enter the async context manually
+
+        self._client_task = asyncio.create_task(self._message_loop())
+        self._connected.set()
+
+        # Subscribe to the main request topic to receive requests
+        request_topic = self._topic_manager.build_request_topic(
+            target_device_tag=self.identifier,
+            subsystem="+",
+            request_id="+"
+        )
+        self.subscriptions.append(request_topic)
+
+        # Subscribe to additional topics if any
+        if self.subscriptions:
+            for topic in self.subscriptions:
+                await self._client.subscribe(topic)
 
     async def disconnect(self):
-        await self.loop.run_in_executor(None, self.client.disconnect)
-        self.client.loop_stop()
-        self.is_connected = False
+        if self._client_task:
+            self._client_task.cancel()
+            try:
+                await self._client_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._client:
+            await self._client.__aexit__(None, None, None)
+
+    async def _message_loop(self):
+        async for message in self._client.messages:
+            payload_str = message.payload.decode()
+
+            try:
+                payload = json.loads(payload_str)
+                header = payload.get("header", {})
+
+                # Handle response
+                if "request_id" in header and "response_code" in header:
+                    request_id = header["request_id"]
+                    async with self._lock:
+                        future = self._pending_requests.pop(request_id, None)
+                    if future and not future.done():
+                        future.set_result(payload)
+
+                # Handle incoming request
+                elif "method" in header and self._request_handler:
+                    request_id = header["request_id"]
+                    response_topic = self._topic_manager.build_response_topic(
+                        request_topic=message.topic.value
+                    )
+                    response = await self._request_handler(payload)
+                    await self.publish(response_topic, response)
+
+            except json.JSONDecodeError:
+                print("Invalid JSON received")
+            except Exception as e:
+                print(f"Error in message loop: {e}")
 
     async def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
-        if not self.is_connected:
-            raise ConnectionError("Not connected to MQTT broker")
+        if not self._client:
+            raise RuntimeError("Client is not connected")
+
         payload_str = json.dumps(payload)
-        await self.loop.run_in_executor(None, self.client.publish, topic, payload_str, qos)
+        await self._client.publish(topic, payload_str, qos=qos)
 
-    async def subscribe(self, topic: str, qos: int = 0):
-        if not self.is_connected:
-            raise ConnectionError("Not connected to MQTT broker")
-        await self.loop.run_in_executor(None, self.client.subscribe, topic, qos)
+    async def subscribe(self, topic: str):
+        if not self._client:
+            raise RuntimeError("Client is not connected")
 
-    async def unsubscribe(self, topic: str):
-        if not self.is_connected:
-            raise ConnectionError("Not connected to MQTT broker")
-        await self.loop.run_in_executor(None, self.client.unsubscribe, topic)
+        await self._client.subscribe(topic)
 
     def generate_request_id(self) -> str:
         return str(uuid.uuid4())
 
-    async def request(self, topic: str) -> Optional[Dict[str, Any]]:
-        if not self.is_connected:
-            raise ConnectionError("Not connected to MQTT broker")
+    async def request(self, target_device_tag, subsystem, path: str) -> Optional[Dict[str, Any]]:
+        if not self._connected.is_set():
+            raise RuntimeError("Client not connected")
 
         payload_handler = PayloadHandler()
         request_id = self.generate_request_id()
+
         request_payload = payload_handler.create_request_payload(
             method=Method.GET,
-            path=topic.split("/")[-1],
+            path=path,
             request_id=request_id
         )
 
-        response_topic = f"{topic}/{request_id}"
-        future = self.loop.create_future()
+        request_topic = self._topic_manager.build_request_topic(
+            target_device_tag=target_device_tag,
+            subsystem=subsystem,
+            request_id=request_id
+        )
+        response_topic = self._topic_manager.build_response_topic(
+            request_topic=request_topic
+        )
 
+        future = asyncio.get_event_loop().create_future()
         async with self._lock:
             self._pending_requests[request_id] = future
 
+        # Subscribe to the response topic for this request
         await self.subscribe(response_topic)
-        await self.publish(topic, request_payload)
+        await self.publish(request_topic, request_payload)
 
         try:
-            response = await asyncio.wait_for(future, timeout=self.timeout)
-            await self.unsubscribe(response_topic)
-            return response
+            return await asyncio.wait_for(future, timeout=self.timeout)
         except asyncio.TimeoutError:
             print(f"Request timed out after {self.timeout} seconds")
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
-            await self.unsubscribe(response_topic)
             return None

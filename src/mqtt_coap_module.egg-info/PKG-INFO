@@ -6,6 +6,7 @@ Author-email: Your Name <your.email@example.com>
 License: MIT
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
+Requires-Dist: aiomqtt>=2.4.0
 Requires-Dist: paho-mqtt>=1.6.1
 Requires-Dist: pytest>=7.0.0
 Requires-Dist: pytest-asyncio>=1.0.0

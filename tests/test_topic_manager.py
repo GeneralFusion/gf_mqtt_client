@@ -1,12 +1,18 @@
 import pytest
 from src.topic_manager import TopicManager
 
-def test_construct_topic():
-    manager = TopicManager()
-    topic = manager.construct_topic("fusion_hall", "m3v3", "axuv", "gain:1:2:a", "2D_AD_0_0001")
-    assert topic == "gf_ext_v1/fusion_hall/m3v3/axuv/gain:1:2:a/2D_AD_0_0001"
+def test_build_request_topic():
+    tm = TopicManager(namespace="gf_int_v1")
+    topic = tm.build_request_topic("2D_AD_0_0001", "axuv", "abc123")
+    assert topic == "gf_int_v1/axuv/request/2D_AD_0_0001/abc123"
 
-def test_validate_topic():
-    manager = TopicManager()
-    assert manager.validate_topic("gf_ext_v1/fusion_hall/m3v3/axuv/gain:1:2:a/2D_AD_0_0001") == True
-    assert manager.validate_topic("invalid/topic") == False
+def test_build_response_topic():
+    tm = TopicManager(namespace="gf_int_v1")
+    request_topic = "gf_int_v1/axuv/request/2D_AD_0_0001/abc123"
+    response_topic = tm.build_response_topic(request_topic)
+    assert response_topic == "gf_int_v1/axuv/response/2D_AD_0_0001/abc123"
+    
+def test_build_response_topic_invalid_format():
+    tm = TopicManager(namespace="gf_int_v1")
+    with pytest.raises(IndexError):
+        tm.build_response_topic("invalid/topic/format")
