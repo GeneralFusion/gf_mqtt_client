@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Dict, Any, Optional, Union, List
-from pydantic import BaseModel, validator, ValidationError
+from pydantic import BaseModel, field_validator, ValidationError
 
 class Method(Enum):
     GET = 1
@@ -31,81 +31,73 @@ class ResponseCode(Enum):
     GATEWAY_TIMEOUT = 504
     PROXYING_NOT_SUPPORTED = 505
 
+
+class PayloadBaseModel(BaseModel):
+    timestamp: Union[int, str]
+    body: Optional[Union[int, float, str, List, Dict]] = None
+
+    @field_validator('timestamp')
+    def validate_timestamp(cls, v):
+        if isinstance(v, str):
+            return int(v) if v.isdigit() else v
+        if isinstance(v, int):
+            return v
+        raise ValueError("timestamp must be an integer or string representation of an integer")
+    
+    @field_validator('body')
+    def validate_body(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, (int, float, str, list, dict)):
+            return v
+        raise ValueError("body must be an int, float, str, list, or dict")
 # Pydantic Models
-class HeaderRequest(BaseModel):
+class RequestBaseModel(BaseModel):
+    request_id: str
+
+    @field_validator('request_id')
+    def validate_request_id(cls, v):
+        v_stripped = v.replace('-', '').strip()
+        if not (len(v_stripped) == 32 and all(c in '0123456789abcdefABCDEF' for c in v_stripped)):
+            raise ValueError("request_id must be a 32-character hexadecimal string")
+        return v
+
+class HeaderRequest(RequestBaseModel):
     method: Union[int, str]
     path: str
-    request_id: str
     token: Optional[str] = None
     correlation_id: Optional[str] = None
 
-    @validator('method')
+    @field_validator('method')
     def validate_method(cls, v):
-        if isinstance(v, int):
-            return Method(v).value if v in {m.value for m in Method} else v
-        if isinstance(v, str):
-            return Method[v.upper()].value if v.upper() in {'GET', 'POST', 'PUT', 'DELETE'} else v
-        raise ValueError("Method must be an integer (1-4) or string ('GET', 'POST', 'PUT', 'DELETE')")
-
-    @validator('request_id')
-    def validate_request_id(cls, v):
-        if not (len(v) == 32 and all(c in '0123456789abcdefABCDEF' for c in v)):
-            raise ValueError("request_id must be a 32-character hexadecimal string")
-        return v
-
-class HeaderResponse(BaseModel):
+        try:
+            assert isinstance(v, (int, str)), "Method must be an integer (1-4) or string ('GET', 'POST', 'PUT', 'DELETE')"
+            if isinstance(v, int):
+                assert v in {m.value for m in Method}
+                return Method(v).value
+            if isinstance(v, str):
+                assert v in {m.name for m in Method}
+                return Method[v.upper()].value
+        except AssertionError:
+            raise ValueError("Method must be an integer (1-4) or string ('GET', 'POST', 'PUT', 'DELETE')")
+        
+class HeaderResponse(RequestBaseModel):
     response_code: int
     path: str
-    request_id: str
     correlation_id: Optional[str] = None
 
-    @validator('response_code')
+    @field_validator('response_code')
     def validate_response_code(cls, v):
         return ResponseCode(v).value if v in {rc.value for rc in ResponseCode} else v
 
-    @validator('request_id')
-    def validate_request_id(cls, v):
-        if not (len(v) == 32 and all(c in '0123456789abcdefABCDEF' for c in v)):
-            raise ValueError("request_id must be a 32-character hexadecimal string")
-        return v
+class GeneralPayload(PayloadBaseModel):
+    pass
 
-class GeneralPayload(BaseModel):
-    body: Union[int, float, str, List]
-    timestamp: Union[int, str]
-
-    @validator('timestamp')
-    def validate_timestamp(cls, v):
-        if isinstance(v, str):
-            return int(v) if v.isdigit() else v
-        if isinstance(v, int):
-            return v
-        raise ValueError("timestamp must be an integer or string representation of an integer")
-
-class RequestPayload(BaseModel):
+class RequestPayload(PayloadBaseModel):
     header: HeaderRequest
-    body: Optional[Union[int, float, str, List, Dict]] = None
-    timestamp: Union[int, str]
 
-    @validator('timestamp')
-    def validate_timestamp(cls, v):
-        if isinstance(v, str):
-            return int(v) if v.isdigit() else v
-        if isinstance(v, int):
-            return v
-        raise ValueError("timestamp must be an integer or string representation of an integer")
-
-class ResponsePayload(BaseModel):
+class ResponsePayload(PayloadBaseModel):
     header: HeaderResponse
-    body: Union[int, float, str, List]
-    timestamp: Union[int, str]
-
-    @validator('timestamp')
-    def validate_timestamp(cls, v):
-        if isinstance(v, str):
-            return int(v) if v.isdigit() else v
-        if isinstance(v, int):
-            return v
-        raise ValueError("timestamp must be an integer or string representation of an integer")
 
 class PayloadHandler:
     def __init__(self):
@@ -114,7 +106,7 @@ class PayloadHandler:
 
     def create_general_payload(self, body: Dict[str, Any], timestamp: str) -> Dict[str, Any]:
         payload = GeneralPayload(body=body, timestamp=timestamp)
-        return payload.dict()
+        return payload.model_dump()
 
     def create_request_payload(self, method: Method, path: str, request_id: str,
                               body: Optional[Dict[str, Any]] = None,
@@ -122,22 +114,22 @@ class PayloadHandler:
                               correlation_id: Optional[str] = None) -> Dict[str, Any]:
         header = HeaderRequest(method=method.value, path=path, request_id=request_id, token=token, correlation_id=correlation_id)
         payload = RequestPayload(header=header, body=body, timestamp=str(self._get_current_timestamp()))
-        return payload.dict()
+        return payload.model_dump()
 
     def create_response_payload(self, response_code: ResponseCode, path: str, request_id: str,
                                body: Dict[str, Any], correlation_id: Optional[str] = None) -> Dict[str, Any]:
         header = HeaderResponse(response_code=response_code.value, path=path, request_id=request_id, correlation_id=correlation_id)
         payload = ResponsePayload(header=header, body=body, timestamp=str(self._get_current_timestamp()))
-        return payload.dict()
+        return payload.model_dump()
 
     def validate_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
             if "method" in payload.get("header", {}):
-                return RequestPayload(**payload).dict()
+                return RequestPayload(**payload).model_dump()
             elif "response_code" in payload.get("header", {}):
-                return ResponsePayload(**payload).dict()
+                return ResponsePayload(**payload).model_dump()
             else:
-                return GeneralPayload(**payload).dict()
+                return GeneralPayload(**payload).model_dump()
         except ValidationError as e:
             print(f"Validation error: {e.json()}")
             raise
