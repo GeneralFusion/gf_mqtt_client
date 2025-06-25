@@ -1,7 +1,7 @@
 import pytest_asyncio
 import time
 from src.mqtt_client import MQTTClient
-from src.message_handler import ResponseHandlerBase, RequestHandlerBase, Message
+from src.message_handler import ResponseHandlerBase, RequestHandlerBase
 from src.topic_manager import TopicManager
 
 LOCAL_BROKER = "lm26consys.gf.local"

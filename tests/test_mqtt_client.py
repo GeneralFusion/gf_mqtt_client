@@ -141,3 +141,18 @@ async def test_default_handler(mqtt_responder, mqtt_requester):
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_invalid_handler_protocol(mqtt_requester):
+    await mqtt_requester.connect()
+    try:
+        # Define an invalid handler missing required methods
+        class InvalidHandler:
+            def handle(self, client):  # Missing topic and payload
+                pass
+
+        with pytest.raises(ValueError):
+            await mqtt_requester.add_message_handler(InvalidHandler())
+    finally:
+        await mqtt_requester.disconnect()

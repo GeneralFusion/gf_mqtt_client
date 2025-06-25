@@ -7,7 +7,7 @@ from aiomqtt import Client
 from models import ResponseCode
 from src.payload_handler import Method, PayloadHandler
 from src.topic_manager import TopicManager
-from src.message_handler import MessageHandlerBase, ResponseHandlerDefault
+from src.message_handler import MessageHandlerBase, MessageHandlerProtocol, ResponseHandlerDefault
 
 
 class MQTTClient:
@@ -33,8 +33,10 @@ class MQTTClient:
         self._username = username
         self._password = password
 
-    async def add_message_handler(self, handler: MessageHandlerBase):
+    async def add_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
+            if not isinstance(handler, MessageHandlerProtocol):
+                raise ValueError("Handler must implement MessageHandlerProtocol")
             self._message_handlers.append(handler)
 
     async def remove_message_handler(self, handler: MessageHandlerBase):
