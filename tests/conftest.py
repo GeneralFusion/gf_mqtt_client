@@ -62,8 +62,6 @@ async def mqtt_requester():
         broker=LOCAL_BROKER, port=LOCAL_PORT, timeout=5, identifier=REQUESTOR_TAG
     )
     client.set_credentials(USERNAME, PASSWORD)
-    client.subscriptions.append("gf_int_v1/+/response/+/+")
-
     # Add response handler
     async def response_handler(client: MQTTClient, topic: str, payload: dict) -> dict:
         if "response_code" in payload.get("header", {}):

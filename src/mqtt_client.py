@@ -180,6 +180,12 @@ class MQTTClient:
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
             return None
+        finally:
+            # Unsubscribe from the response topic after handling the request
+            await self._client.unsubscribe(response_topic)
+            async with self._lock:
+                if request_id in self._pending_requests:
+                    del self._pending_requests[request_id]
 
 # Example usage of message handlers
 if __name__ == "__main__":
