@@ -1,8 +1,8 @@
 import pytest_asyncio
 import time
-from src.mqtt_client import MQTTClient
-from src.message_handler import ResponseHandlerBase, RequestHandlerBase
-from src.topic_manager import TopicManager
+from gf_mqtt_client.mqtt_client import MQTTClient
+from gf_mqtt_client.message_handler import ResponseHandlerBase, RequestHandlerBase
+from gf_mqtt_client.topic_manager import TopicManager
 
 LOCAL_BROKER = "lm26consys.gf.local"
 LOCAL_PORT = 1893
@@ -37,7 +37,7 @@ async def mqtt_responder():
         broker=LOCAL_BROKER, port=LOCAL_PORT, timeout=3, identifier=RESPONDER_TAG
     )
     client.set_credentials(USERNAME, PASSWORD)
-    client.subscriptions.append(f"gf_int_v1/+/request/{RESPONDER_TAG}/+")
+    # client.subscriptions.append(f"gf_int_v1/+/request/{RESPONDER_TAG}/+")
 
     # Update to use MessageHandler instead of set_request_handler
     async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict:

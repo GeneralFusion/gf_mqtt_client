@@ -1,5 +1,5 @@
 [project]
-name = "mqtt_coap_module"
+name = "gf-mqtt-client"
 version = "0.1.0"
 description = "A Python module for MQTT communication inspired by CoAP, with async support and microcontroller compatibility."
 authors = [{ name = "Your Name", email = "your.email@example.com" }]

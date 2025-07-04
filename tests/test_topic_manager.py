@@ -1,5 +1,5 @@
 import pytest
-from src.topic_manager import TopicManager
+from gf_mqtt_client.topic_manager import TopicManager
 
 def test_build_request_topic():
     tm = TopicManager(namespace="gf_int_v1")
@@ -11,7 +11,7 @@ def test_build_response_topic():
     request_topic = "gf_int_v1/axuv/request/2D_AD_0_0001/abc123"
     response_topic = tm.build_response_topic(request_topic)
     assert response_topic == "gf_int_v1/axuv/response/2D_AD_0_0001/abc123"
-    
+
 def test_build_response_topic_invalid_format():
     tm = TopicManager(namespace="gf_int_v1")
     with pytest.raises(IndexError):

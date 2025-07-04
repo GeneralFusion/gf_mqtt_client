@@ -1,6 +1,6 @@
 from pydantic import ValidationError
 import pytest
-from src.payload_handler import PayloadHandler, Method, ResponseCode
+from gf_mqtt_client.payload_handler import PayloadHandler, Method, ResponseCode
 
 def test_create_general_payload():
     handler = PayloadHandler()
@@ -92,7 +92,6 @@ def test_validate_payload():
     # Test Invalid JSON (non-dict body)
     invalid_body_payload = {"body": None, "timestamp": "1745534869619"}
     handler.validate_payload(invalid_body_payload)
-
 
 
 def test_parse_payload():

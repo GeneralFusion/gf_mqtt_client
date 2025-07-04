@@ -1,8 +1,8 @@
 from typing import Any, Dict
 import pytest
 import asyncio
-from src.mqtt_client import MQTTClient, MessageHandlerBase
-from src.payload_handler import ResponseCode, PayloadHandler
+from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
+from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
 from .conftest import RESPONDER_TAG, REQUESTOR_TAG
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
