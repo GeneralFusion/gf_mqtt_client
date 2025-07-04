@@ -7,7 +7,7 @@ from gf_mqtt_client.message_handler import RequestHandlerBase
 from gf_mqtt_client.topic_manager import TopicManager
 
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 PUBLIC_BROKER = "broker.emqx.io"
 PUBLIC_PORT = 1883
@@ -36,7 +36,6 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
     response = create_response(payload)
     # print in red text
     print(f"\033[91m[{DEVICE_TAG}] Responding to {payload['header']['request_id']}\033[0m")
-    # print(f"[{DEVICE_TAG}] Responding to {payload['header']['request_id']}")
     response_topic = TopicManager().build_response_topic(
         request_topic=topic
     )
