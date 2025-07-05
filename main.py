@@ -9,11 +9,15 @@ from gf_mqtt_client.topic_manager import TopicManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Public MQTT broker details
+# Replace with your actual broker details if needed.
 PUBLIC_BROKER = "broker.emqx.io"
 PUBLIC_PORT = 1883
-
 DEVICE_TAG = "2D_XX_0_9999"
 
+# The following function creates a client, which listens for requests and responds with a mock response.
+# It simulates a device that can handle requests for a specific path, in this case, "mock".
+# It repeatedly sends requests to itself every 2 seconds, simulating a request-response cycle.
 
 def create_response(request_payload: dict) -> dict:
     """Generate a mock response based on the request payload."""
