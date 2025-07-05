@@ -57,9 +57,10 @@ async def create_mqtt_client():
 async def main():
     client = await create_mqtt_client()
     try:
+        print(f"Connected to MQTT broker as {DEVICE_TAG}. Listening for requests...")
         while True:
             await client.request(target_device_tag=DEVICE_TAG, subsystem="example", path="mock")
-            await asyncio.sleep(2)  # Keep the client running for a while to process requests
+            await asyncio.sleep(2)  
     except KeyboardInterrupt:
         print("Exiting...")
     finally:
