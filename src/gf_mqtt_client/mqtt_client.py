@@ -237,7 +237,7 @@ class MQTTClient:
         return input_string
 
     async def request(
-        self, target_device_tag, subsystem, path: str
+        self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None
     ) -> Optional[Dict[str, Any]]:
         if not self._connected.is_set():
             logging.error(
@@ -249,8 +249,13 @@ class MQTTClient:
         request_id = self.generate_request_id()
         logging.debug(f"Generated request ID {request_id} for client {self.identifier}")
 
+        if method != Method.GET.value:
+            if value is None:
+                logging.error(f"Cannot send {method} request: value is required")
+                raise ValueError("Value is required for non-GET requests")
+
         request_payload = payload_handler.create_request_payload(
-            method=Method.GET, path=path, request_id=request_id
+            method=method, path=path, request_id=request_id, body=value
         )
 
         request_topic = self._topic_manager.build_request_topic(

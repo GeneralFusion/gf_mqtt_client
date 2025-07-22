@@ -2,6 +2,12 @@ from enum import Enum
 from typing import Dict, Optional, Union, List
 from pydantic import BaseModel, field_validator
 
+class MQTTBrokerConfig(BaseModel):
+    username: str = ""
+    password: str = ""
+    hostname: str = "broker.emqx.io"
+    port: int = 1883
+    timeout: int = 5
 
 class Method(Enum):
     GET = 1
