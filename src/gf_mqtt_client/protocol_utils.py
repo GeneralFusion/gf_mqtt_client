@@ -1,5 +1,5 @@
 from enum import Enum
-from src.payload_handler import Method, ResponseCode
+from .payload_handler import Method, ResponseCode
 
 class ProtocolUtils:
     @staticmethod

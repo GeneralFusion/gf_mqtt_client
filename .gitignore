@@ -175,3 +175,5 @@ cython_debug/
 !.coveragerc
 
 */*.egg-info/
+
+local_test.py

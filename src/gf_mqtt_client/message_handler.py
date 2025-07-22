@@ -17,6 +17,8 @@ class MessageHandlerProtocol(Protocol):
     @property
     def propagate(self) -> bool:
         ...
+
+
         
 class MessageHandlerBase:
     def __init__(
@@ -39,6 +41,26 @@ class MessageHandlerBase:
     def propagate(self) -> bool:
         return self._propagate
     
+    def _truncate_payload(self, payload: str, output_length: int = 50) -> str:
+        """
+        Truncates a payload to a specified length, appending '...' if truncated.
+
+        Args:
+            payload: The input string to truncate.
+            output_length: Maximum length of the output string (default: 50).
+
+        Returns:
+            Truncated payload as a string, or original payload if length <= output_length.
+        """
+        if not isinstance(payload, str):
+            try:
+                payload = str(payload)
+            except Exception:
+                return payload
+
+        if len(payload) > output_length:
+            return payload[:output_length] + "..."
+        return payload
 
 class ResponseHandlerBase(MessageHandlerBase):
     def __init__(self, process: Callable[[MQTTClient, str, Dict[str, Any]], Awaitable[Dict[str, Any]]], propagate: bool = False):
@@ -58,13 +80,13 @@ class RequestHandlerBase(MessageHandlerBase):
 class ResponseHandlerDefault(ResponseHandlerBase):
     def __init__(self):
         async def process_default_response(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Awaitable[Dict[str, Any]]:
-            logging.debug(f"Response received: {payload}", extra={"topic": topic})
+            logging.debug(f"Response received: {self._truncate_payload(payload)}", extra={"topic": topic})
             return payload
         super().__init__(process=process_default_response, propagate=True)
 
 class RequestHandlerDefault(RequestHandlerBase):
     def __init__(self):
         async def process_default_request(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Awaitable[Dict[str, Any]]:
-            logging.debug(f"Request received: {payload}", extra={"topic": topic})
+            logging.debug(f"Request received: {self._truncate_payload(payload)}", extra={"topic": topic})
             return payload
         super().__init__(process=process_default_request, propagate=True)

@@ -44,30 +44,40 @@ class MQTTClient:
     def set_credentials(self, username: str, password: str):
         self._username = username
         self._password = password
-        logging.info(f"Credentials set for username {username} in client {self.identifier}")
+        logging.info(
+            f"Credentials set for username {username} in client {self.identifier}"
+        )
 
     async def add_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
             if not isinstance(handler, MessageHandlerProtocol):
                 raise ValueError("Handler must implement MessageHandlerProtocol")
             self._message_handlers.append(handler)
-            logging.info(f"Added message handler {handler.__class__.__name__} to client {self.identifier}")
+            logging.info(
+                f"Added message handler {handler.__class__.__name__} to client {self.identifier}"
+            )
 
     async def remove_message_handler(self, handler: MessageHandlerBase):
         async with self._lock:
             if handler in self._message_handlers:
                 self._message_handlers.remove(handler)
-                logging.info(f"Removed message handler {handler.__class__.__name__} from client {self.identifier}")
+                logging.info(
+                    f"Removed message handler {handler.__class__.__name__} from client {self.identifier}"
+                )
             else:
-                logging.warning(f"Handler {handler.__class__.__name__} not found in client {self.identifier}")
+                logging.warning(
+                    f"Handler {handler.__class__.__name__} not found in client {self.identifier}"
+                )
 
     def generate_request_id(self) -> str:
         # Generate a unique request ID using UUID
         logging.debug(f"Generating request ID for client {self.identifier}")
         return str(uuid.uuid4())
-    
+
     async def connect(self):
-        logging.info(f"Connecting to broker {self.broker}:{self.port} with client {self.identifier}")
+        logging.info(
+            f"Connecting to broker {self.broker}:{self.port} with client {self.identifier}"
+        )
         self._client = Client(
             hostname=self.broker,
             port=self.port,
@@ -89,7 +99,9 @@ class MQTTClient:
         if self.subscriptions:
             for topic in self.subscriptions:
                 await self._client.subscribe(topic)
-                logging.info(f"Subscribed to topic {topic} with client {self.identifier}")
+                logging.info(
+                    f"Subscribed to topic {topic} with client {self.identifier}"
+                )
 
         await self.add_message_handler(ResponseHandlerDefault())
         logging.debug(f"Added default response handler for client {self.identifier}")
@@ -101,7 +113,9 @@ class MQTTClient:
             try:
                 await self._client_task
             except asyncio.CancelledError:
-                logging.debug(f"Message loop task cancelled for client {self.identifier}")
+                logging.debug(
+                    f"Message loop task cancelled for client {self.identifier}"
+                )
 
         if self._client:
             await self._client.__aexit__(None, None, None)
@@ -113,7 +127,15 @@ class MQTTClient:
             try:
                 payload = json.loads(payload_str)
                 topic = message.topic
-                logging.debug(f"Received message on topic {topic} with payload {payload} for client {self.identifier}")
+                logging.debug(
+                    f"Received message on topic {topic} with payload {payload} for client {self.identifier}",
+                    extra={
+                        "payload": payload,
+                        "request_id": payload.get("header", {}).get("request_id"),
+                        "topic": topic,
+                        "client": self.identifier,
+                    },
+                )
                 processed = False
                 for handler in self._message_handlers:
                     if not handler.can_handle(self, topic, payload):
@@ -127,13 +149,21 @@ class MQTTClient:
                                 future = self._pending_requests.pop(request_id, None)
                             if future and not future.done():
                                 future.set_result(payload)
-                                logging.debug(f"Resolved request {request_id} with response {payload} for client {self.identifier}")
+                                logging.debug(
+                                    f"Resolved request {request_id} with response {self._truncate_str(payload_str)} for client {self.identifier}",
+                                    extra={
+                                        "payload": payload,
+                                        "request_id": header["request_id"],
+                                        "topic": topic,
+                                        "client": self.identifier,
+                                    },
+                                )
                         processed = True
                     if not handler.propagate:
                         break
 
                 if not processed and any(
-                    h.can_handle(self, message) for h in self._message_handlers
+                    h.can_handle(self, topic, payload) for h in self._message_handlers
                 ):
                     default_handler = MessageHandlerBase(
                         can_handle=lambda c, m: True,
@@ -144,14 +174,24 @@ class MQTTClient:
                     await default_handler.handle(self, topic, payload)
 
             except json.JSONDecodeError:
-                logging.error(f"Invalid JSON received on topic {message.topic} for client {self.identifier}")
+                logging.error(
+                    f"Invalid JSON received on topic {message.topic} for client {self.identifier}",
+                    extra={
+                        "topic": message.topic,
+                        "client": self.identifier,
+                    },
+                )
             except Exception as e:
-                logging.exception(f"Error in message loop for client {self.identifier}: {e}")
+                logging.exception(
+                    f"Error in message loop for client {self.identifier}: {e}"
+                )
 
     async def _default_handler(
         self, topic: str, payload: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        logging.info(f"Default handler processing unhandled message on topic {topic}: {payload} for client {self.identifier}")
+        logging.info(
+            f"Default handler processing unhandled message on topic {topic}: {self._truncate_str(payload)} for client {self.identifier}"
+        )
         return payload
 
     async def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
@@ -161,21 +201,48 @@ class MQTTClient:
 
         payload_str = json.dumps(payload)
         await self._client.publish(topic, payload_str, qos=qos)
-        logging.debug(f"Published message to topic {topic} with payload {payload} for client {self.identifier}")
+        logging.debug(
+            f"Published message to topic {topic} with payload {self._truncate_str(payload)} for client {self.identifier}"
+        )
 
     async def subscribe(self, topic: str):
         if not self._client:
-            logging.error(f"Cannot subscribe: Client {self.identifier} is not connected")
+            logging.error(
+                f"Cannot subscribe: Client {self.identifier} is not connected"
+            )
             raise RuntimeError("Client is not connected")
 
         await self._client.subscribe(topic)
         logging.info(f"Subscribed to topic {topic} with client {self.identifier}")
 
+    def _truncate_str(self, input_string: str, output_length: int = 50) -> str:
+        """
+        Truncates a string to a specified length, appending '...' if truncated.
+
+        Args:
+            string: The input string to truncate.
+            output_length: Maximum length of the output string (default: 50).
+
+        Returns:
+            Truncated string, or original string if length <= output_length.
+        """
+        if not isinstance(input_string, str):
+            try:
+                input_string = str(input_string)
+            except Exception:
+                return input_string
+
+        if len(input_string) > output_length:
+            return input_string[:output_length] + "..."
+        return input_string
+
     async def request(
         self, target_device_tag, subsystem, path: str
     ) -> Optional[Dict[str, Any]]:
         if not self._connected.is_set():
-            logging.error(f"Cannot send request: Client {self.identifier} is not connected")
+            logging.error(
+                f"Cannot send request: Client {self.identifier} is not connected"
+            )
             raise RuntimeError("Client not connected")
 
         payload_handler = PayloadHandler()
@@ -201,24 +268,34 @@ class MQTTClient:
 
         await self.subscribe(response_topic)
         await self.publish(request_topic, request_payload)
-        logging.info(f"Sent request {request_id} to topic {request_topic} for client {self.identifier}")
+        logging.info(
+            f"Sent request {request_id} to topic {request_topic} for client {self.identifier}"
+        )
 
         try:
             result = await asyncio.wait_for(future, timeout=self.timeout)
-            logging.info(f"Received response for request {request_id} on topic {response_topic}: {result} for client {self.identifier}")
+            logging.info(
+                f"Received response for request {request_id} on topic {response_topic}: {self._truncate_str(result)} for client {self.identifier}"
+            )
             return result
         except asyncio.TimeoutError:
-            logging.warning(f"Request {request_id} timed out after {self.timeout} seconds for client {self.identifier}")
+            logging.warning(
+                f"Request {request_id} timed out after {self.timeout} seconds for client {self.identifier}"
+            )
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
             return None
         finally:
             await self._client.unsubscribe(response_topic)
-            logging.info(f"Unsubscribed from response topic {response_topic} for client {self.identifier}")
+            logging.info(
+                f"Unsubscribed from response topic {response_topic} for client {self.identifier}"
+            )
             async with self._lock:
                 if request_id in self._pending_requests:
                     del self._pending_requests[request_id]
-                    logging.debug(f"Removed pending request {request_id} from tracking for client {self.identifier}")
+                    logging.debug(
+                        f"Removed pending request {request_id} from tracking for client {self.identifier}"
+                    )
 
 
 # Example usage of message handlers
