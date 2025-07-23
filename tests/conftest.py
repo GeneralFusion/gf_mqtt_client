@@ -1,5 +1,6 @@
 import pytest_asyncio
 import time
+from gf_mqtt_client.models import Method, ResponseCode
 from gf_mqtt_client.mqtt_client import MQTTClient
 from gf_mqtt_client.message_handler import ResponseHandlerBase, RequestHandlerBase
 from gf_mqtt_client.topic_manager import TopicManager
@@ -19,14 +20,28 @@ def create_response(request_payload: dict) -> dict:
     path = request_payload["header"]["path"]
     assert path == "gains"
 
+    method = request_payload["header"]["method"]
+    if method == Method.GET.value:
+        # Handle GET request
+        response_code = ResponseCode.CONTENT
+        body = [0, 1, 2, 3, 4]
+    elif method == Method.PUT.value:
+        # Handle PUT request
+        response_code = ResponseCode.CHANGED
+        body = None
+    elif method == Method.POST.value:
+        # Handle POST request
+        response_code = ResponseCode.CREATED
+        body = None
+
     return {
         "header": {
-            "response_code": 205,
+            "response_code": response_code,
             "path": path,
             "request_id": request_payload["header"]["request_id"],
             "correlation_id": request_payload["header"].get("correlation_id"),
         },
-        "body": [0, 1, 2, 3, 4],
+        "body": body,
         "timestamp": str(int(time.time() * 1000)),
     }
 

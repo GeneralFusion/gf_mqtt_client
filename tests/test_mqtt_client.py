@@ -1,6 +1,7 @@
 from typing import Any, Dict
 import pytest
 import asyncio
+from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
 from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
 from .conftest import RESPONDER_TAG, REQUESTOR_TAG
@@ -156,3 +157,19 @@ async def test_invalid_handler_protocol(mqtt_requester):
             await mqtt_requester.add_message_handler(InvalidHandler())
     finally:
         await mqtt_requester.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_put_success(mqtt_responder, mqtt_requester):
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        response = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH, method=Method.PUT, value=0)
+        assert response is not None, "Expected a valid response, got None"
+        assert "header" in response
+        assert "response_code" in response["header"]
+        assert response["header"]["response_code"] == ResponseCode.CHANGED
+        assert int(response["timestamp"]) >= CURRENT_TIMESTAMP, "Timestamp should be current or later"
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
