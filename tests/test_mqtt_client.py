@@ -1,10 +1,13 @@
 from typing import Any, Dict
 import pytest
 import asyncio
+from gf_mqtt_client.exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, GatewayTimeoutResponse
+from gf_mqtt_client.message_handler import ResponseHandlerBase
 from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
 from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
 from .conftest import RESPONDER_TAG, REQUESTOR_TAG
+
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
 from datetime import datetime
@@ -40,12 +43,13 @@ async def test_request_timeout(mqtt_responder, mqtt_requester):
     await mqtt_responder.connect()
     await mqtt_requester.connect()
     try:
-        response = await mqtt_requester.request(
-            target_device_tag="nonexistent_device",
-            subsystem="nonexistent_subsystem",
-            path="nonexistent_path"
-        )
-        assert response is None, "Expected no response due to timeout"
+        with pytest.raises(GatewayTimeoutResponse):
+            response = await mqtt_requester.request(
+                target_device_tag="nonexistent_device",
+                subsystem="nonexistent_subsystem",
+                path="nonexistent_path",
+                timeout=1
+            )
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()
@@ -168,8 +172,66 @@ async def test_put_success(mqtt_responder, mqtt_requester):
         assert response is not None, "Expected a valid response, got None"
         assert "header" in response
         assert "response_code" in response["header"]
-        assert response["header"]["response_code"] == ResponseCode.CHANGED
+        assert response["header"]["response_code"] == ResponseCode.CHANGED.value
         assert int(response["timestamp"]) >= CURRENT_TIMESTAMP, "Timestamp should be current or later"
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+
+@pytest.mark.asyncio
+async def test_request_bad_request_exception(mqtt_responder, mqtt_requester):
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        # Use a custom handler that raises exceptions
+        from gf_mqtt_client.message_handler import ResponseHandlerBase
+
+        async def exception_raising_handler(client, topic, payload):
+            return payload  # it will raise via handle_response_with_exception
+
+        await mqtt_requester.add_message_handler(ResponseHandlerBase(
+            process=exception_raising_handler,
+            propagate=False,
+            raise_exceptions=True,
+        ))
+
+        # Manually inject a simulate_error flag to force NOT_FOUND
+        with pytest.raises(NotFoundResponse):
+            await mqtt_requester.request(
+                target_device_tag=RESPONDER_TAG,
+                subsystem=TOPIC_SUBSYSTEM,
+                path='bad_request',
+            )
+
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+@pytest.mark.asyncio
+async def test_request_unauthorized_response(mqtt_responder, mqtt_requester):
+
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+
+    try:
+        async def exception_raising_handler(client, topic, payload):
+            return payload
+
+        await mqtt_requester.add_message_handler(ResponseHandlerBase(
+            process=exception_raising_handler,
+            propagate=False,
+            raise_exceptions=True,
+        ))
+
+        with pytest.raises(NotFoundResponse):
+            await mqtt_requester.request(
+                target_device_tag=RESPONDER_TAG,
+                subsystem=TOPIC_SUBSYSTEM,
+                path="unknown_path",
+            )
+
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()

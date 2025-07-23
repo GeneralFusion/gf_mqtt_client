@@ -1,10 +1,13 @@
 import asyncio
 import threading
+from time import sleep, time
 from typing import Any, Dict, Optional, List
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import atexit
 
+from gf_mqtt_client.exceptions import ResponseException
+from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient
 from gf_mqtt_client.message_handler import MessageHandlerProtocol
 
@@ -74,7 +77,7 @@ class SyncMQTTClient:
         self._ensure_loop_running()
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result()
-    
+
     def connect(self):
         """Connect to the MQTT broker (blocking)."""
         try:
@@ -94,8 +97,9 @@ class SyncMQTTClient:
                 logging.info(f"Successfully disconnected MQTT client {self._mqtt_client.identifier}")
             except Exception as e:
                 logging.error(f"Error during disconnect: {e}")
+                raise
     
-    def request(self, target_device_tag: str, subsystem: str, path: str) -> Optional[Dict[str, Any]]:
+    def request(self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int = None) -> Optional[Dict[str, Any]]:
         """
         Send a request and wait for response (blocking).
         
@@ -112,11 +116,14 @@ class SyncMQTTClient:
         
         try:
             return self._run_async(
-                self._mqtt_client.request(target_device_tag, subsystem, path)
+                self._mqtt_client.request(target_device_tag=target_device_tag, subsystem=subsystem, path=path, method=method, value=value, timeout=timeout)
             )
-        except Exception as e:
-            logging.error(f"Request failed: {e}")
+        except ResponseException as e:
+            logging.warning(f"Protocol error from device: {e}")
             raise
+        # except Exception as e:
+        #     logging.error(f"Transport or internal error: {e}")
+        #     raise e
     
     def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
         """Publish a message (blocking)."""
@@ -194,41 +201,64 @@ class SyncMQTTClient:
 
 
 
-# Example usage
-if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# # Example usage
+# if __name__ == "__main__":
+#     # Configure logging
+#     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     
-    # Example 1: Using the full-featured wrapper
-    print("Example 1: Full-featured wrapper")
-    client = SyncMQTTClient(
-        broker="lm26consys.gf.local",
-        port=1893,
-        username="user",
-        password="goodlinerCompressi0n!"
-    )
+#     # Example 1: Using the full-featured wrapper
+#     print("Example 1: Full-featured wrapper")
+#     client = SyncMQTTClient(
+#         broker="lm26consys.gf.local",
+#         port=1893,
+#         username="user",
+#         password="goodlinerCompressi0n!"
+#     )
     
-    try:
-        client.connect()
-        response = client.request("ZZ_ZZ_0_9997", "example", "data")
-        print(f"Response: {response}")
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        client.disconnect()
+#     try:
+#         client.connect()
+#         response = client.request("ZZ_ZZ_0_9997", "example", "data")
+#         print(f"Response: {response}")
+#     except Exception as e:
+#         print(f"Error: {e}")
+#     finally:
+#         client.disconnect()
     
-    print("\nExample 2: Using context manager")
-    # Example 2: Using context manager
-    try:
-        with SyncMQTTClient(
-        broker="lm26consys.gf.local",
-        port=1893,
-        identifier="sync_context_client",
-        username="user",
-        password="goodlinerCompressi0n!"
-    ) as client:
-            response = client.request("device1", "example", "data")
-            print(f"Response: {response}")
-    except Exception as e:
-        print(f"Error: {e}")
+#     print("\nExample 2: Using context manager")
+#     # Example 2: Using context manager
+#     try:
+#         with SyncMQTTClient(
+#         broker="lm26consys.gf.local",
+#         port=1893,
+#         identifier="sync_context_client",
+#         username="user",
+#         password="goodlinerCompressi0n!"
+#     ) as client:
+#             response = client.request("device1", "example", "data")
+#             print(f"Response: {response}")
+#     except Exception as e:
+#         print(f"Error: {e}")
     
+
+# if __name__ == "__main__":
+#     client = SyncMQTTClient(
+#         broker="lm26consys.gf.local",
+#         port=1893,
+#         identifier="sync_context_client",
+#         username="user",
+#         password="goodlinerCompressi0n!"
+#     )
+
+#     # Attach a handler that directly raises
+#     from gf_mqtt_client.exceptions import BadRequestResponse
+
+#     def mock_request(target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int = None):
+#         raise BadRequestResponse("manually raised")
+
+#     client._mqtt_client.request = mock_request  # override direct
+
+#     client.connect()
+#     try:
+#         client.request("any", "any", "any")
+#     except ResponseException:
+#         print("✅ Caught BadRequestResponse as expected")

@@ -12,7 +12,7 @@ from .message_handler import (
     MessageHandlerProtocol,
     ResponseHandlerDefault,
 )
-
+from .exceptions import ResponseException, GatewayTimeoutResponse
 
 class MQTTClient:
     def __init__(
@@ -181,10 +181,17 @@ class MQTTClient:
                         "client": self.identifier,
                     },
                 )
+            
+            except ResponseException as e:
+                logging.exception(f"Response Failed: {e}")
+                async with self._lock:
+                    future = self._pending_requests.pop(payload.get("header", {}).get("request_id"), None)
+                if future and not future.done():
+                    future.set_exception(e)
+                    
             except Exception as e:
-                logging.exception(
-                    f"Error in message loop for client {self.identifier}: {e}"
-                )
+                logging.error(f"Transport or internal error: {e}")
+                raise e
 
     async def _default_handler(
         self, topic: str, payload: Dict[str, Any]
@@ -237,7 +244,7 @@ class MQTTClient:
         return input_string
 
     async def request(
-        self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None
+        self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int = None
     ) -> Optional[Dict[str, Any]]:
         if not self._connected.is_set():
             logging.error(
@@ -249,7 +256,7 @@ class MQTTClient:
         request_id = self.generate_request_id()
         logging.debug(f"Generated request ID {request_id} for client {self.identifier}")
 
-        if method != Method.GET.value:
+        if method != Method.GET:
             if value is None:
                 logging.error(f"Cannot send {method} request: value is required")
                 raise ValueError("Value is required for non-GET requests")
@@ -278,18 +285,20 @@ class MQTTClient:
         )
 
         try:
-            result = await asyncio.wait_for(future, timeout=self.timeout)
+            result = await asyncio.wait_for(future, timeout = timeout or self.timeout)
             logging.info(
                 f"Received response for request {request_id} on topic {response_topic}: {self._truncate_str(result)} for client {self.identifier}"
             )
             return result
+
         except asyncio.TimeoutError:
             logging.warning(
                 f"Request {request_id} timed out after {self.timeout} seconds for client {self.identifier}"
             )
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
-            return None
+            raise GatewayTimeoutResponse()
+        
         finally:
             await self._client.unsubscribe(response_topic)
             logging.info(
