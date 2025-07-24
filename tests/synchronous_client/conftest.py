@@ -7,14 +7,14 @@ from tests.conftest import BROKER_CONFIG, REQUESTOR_TAG, RESPONDER_TAG, request_
 
 DEVICE_MEMORY_MOCK = {"gains": [0, 1, 2, 3, 4], "status": "ONLINE"}
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def sync_mqtt_requestor():  # mqtt_client is your async one with test responder
     yield SyncMQTTClient(
         broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=5, identifier=REQUESTOR_TAG, username=BROKER_CONFIG.username, password=BROKER_CONFIG.password
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def sync_mqtt_responder():
     client = SyncMQTTClient(
         broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=3, identifier=RESPONDER_TAG
