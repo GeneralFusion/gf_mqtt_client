@@ -84,6 +84,7 @@ class SyncMQTTClient:
             self._run_async(self._mqtt_client.connect())
             self._connected = True
             logging.info(f"Successfully connected MQTT client {self._mqtt_client.identifier}")
+            return self
         except Exception as e:
             logging.error(f"Failed to connect MQTT client: {e}")
             raise
@@ -121,9 +122,9 @@ class SyncMQTTClient:
         except ResponseException as e:
             logging.warning(f"Protocol error from device: {e}")
             raise
-        # except Exception as e:
-        #     logging.error(f"Transport or internal error: {e}")
-        #     raise e
+        except Exception as e:
+            logging.error(f"Transport or internal error: {e}")
+            raise e
     
     def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
         """Publish a message (blocking)."""

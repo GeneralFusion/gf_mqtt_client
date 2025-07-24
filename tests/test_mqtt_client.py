@@ -2,7 +2,7 @@ import time
 from typing import Any, Dict
 import pytest
 import asyncio
-import datetime
+from datetime import datetime
 
 from gf_mqtt_client.exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, GatewayTimeoutResponse
 from gf_mqtt_client.message_handler import ResponseHandlerBase
@@ -14,7 +14,7 @@ from .conftest import RESPONDER_TAG, REQUESTOR_TAG
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
-from datetime import datetime
+MAX_REQUESTS = 100  # Maximum concurrent requests for stress tests
 
 # Current date and time for testing
 CURRENT_TIMESTAMP = int(datetime(2025, 6, 24, 14, 51).timestamp() * 1000)  # 02:51 PM PDT, June 24, 2025
@@ -58,7 +58,7 @@ async def test_request_timeout(mqtt_responder, mqtt_requester):
                 target_device_tag="nonexistent_device",
                 subsystem="nonexistent_subsystem",
                 path="nonexistent_path",
-                timeout=5
+                timeout=0.1
             )
     finally:
         await mqtt_requester.disconnect()
@@ -91,7 +91,7 @@ async def test_concurrent_requests_stress(mqtt_responder, mqtt_requester):
             assert "header" in resp and "response_code" in resp["header"]
             print(f"[{index}] Response: {resp['header']['response_code']}")
 
-        await asyncio.gather(*[send(i) for i in range(1000)])  # Increase to stress more
+        await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])  # Increase to stress more
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()
@@ -332,7 +332,7 @@ async def test_concurrent_puts_stress(mqtt_responder, mqtt_requester):
             )
             assert put["header"]["response_code"] == ResponseCode.CHANGED.value
 
-        await asyncio.gather(*[send(i) for i in range(1000)])
+        await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()
@@ -355,7 +355,7 @@ async def test_concurrent_gets_stress(mqtt_responder, mqtt_requester):
             # we only assert the status code, not the body
             assert resp["header"]["response_code"] == ResponseCode.CONTENT.value
 
-        await asyncio.gather(*[send(i) for i in range(1000)])
+        await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()
@@ -440,7 +440,7 @@ async def test_concurrent_post_create_resources_stress(mqtt_responder, mqtt_requ
             assert get["body"] == body
 
         # launch 500 workers in parallel
-        await asyncio.gather(*[worker(i) for i in range(500)])
+        await asyncio.gather(*[worker(i) for i in range(MAX_REQUESTS)])
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()

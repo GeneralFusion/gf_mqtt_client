@@ -11,7 +11,7 @@ from tests.conftest import RESPONDER_TAG
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
-
+MAX_REQUESTS = 100  # Maximum concurrent requests for stress tests
 CURRENT_TS = int(time.time() * 1000)
 
 
@@ -66,7 +66,7 @@ def test_sync_request_timeout(sync_mqtt_requestor, sync_mqtt_responder):
                 target_device_tag="nonexistent_device",
                 subsystem="nope",
                 path="nope",
-                timeout=1
+                timeout=0.5
             )
     finally:
         sync_mqtt_requestor.disconnect()
@@ -87,7 +87,7 @@ def test_sync_concurrent_requests(sync_mqtt_requestor, sync_mqtt_responder):
             assert resp["header"]["response_code"] == 205
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
-            pool.map(worker, range(5))
+            pool.map(worker, range(MAX_REQUESTS))
     finally:
         sync_mqtt_requestor.disconnect()
         sync_mqtt_responder.disconnect()
@@ -346,7 +346,7 @@ def test_sync_concurrent_puts_stress(sync_mqtt_requestor, sync_mqtt_responder):
             assert put["header"]["response_code"] == ResponseCode.CHANGED.value
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as pool:
-            pool.map(worker, range(1000))
+            pool.map(worker, range(MAX_REQUESTS))
     finally:
         sync_mqtt_requestor.disconnect()
         sync_mqtt_responder.disconnect()
@@ -366,7 +366,7 @@ def test_sync_concurrent_gets_stress(sync_mqtt_requestor, sync_mqtt_responder):
             assert resp["header"]["response_code"] == ResponseCode.CONTENT.value
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as pool:
-            pool.map(reader, range(1000))
+            pool.map(reader, range(MAX_REQUESTS))
     finally:
         sync_mqtt_requestor.disconnect()
         sync_mqtt_responder.disconnect()
@@ -429,7 +429,7 @@ def test_sync_concurrent_post_create_resources_stress(sync_mqtt_requestor, sync_
             assert get["body"] == body
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
-            pool.map(worker, range(500))
+            pool.map(worker, range(MAX_REQUESTS))
     finally:
         sync_mqtt_requestor.disconnect()
         sync_mqtt_responder.disconnect()

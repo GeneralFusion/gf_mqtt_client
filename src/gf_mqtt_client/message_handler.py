@@ -5,6 +5,8 @@ from typing import Any, Awaitable, Callable, Dict, Optional, runtime_checkable, 
 import logging
 from .models import ResponseCode
 from .exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, InternalServerErrorResponse, MethodNotAllowedResponse, ResponseException, GatewayTimeoutResponse
+from .topic_manager import TopicManager
+
 # from src.mqtt_client import MQTTClient
 MQTTClient = Any  # Placeholder for the actual MQTTClient type, replace with the correct import
 
@@ -21,9 +23,14 @@ RESPONSE_CODE_EXCEPTION_MAP = {
 }
 
 
-def handle_response_with_exception(payload: Dict[str, Any]) -> Dict[str, Any]:
+def handle_response_with_exception(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    topic_manager = TopicManager()
+
     header = payload.get("header", {})
+    path = header.get("path")
     response_code_value = header.get("response_code")
+    detail = payload.get("body") or header.get("location") or header.get("error_message")
+    target_tag = topic_manager.get_target_device_tag_from_topic(topic)
 
     if response_code_value is not None:
         try:
@@ -33,7 +40,7 @@ def handle_response_with_exception(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         exception_class = RESPONSE_CODE_EXCEPTION_MAP.get(response_code)
         if exception_class:
-            raise exception_class(f"Response code {response_code.value}: {response_code.name}")
+            raise exception_class(response_code=response_code.value, path=path, detail=str(detail), source=client.identifier, target=target_tag)
 
 
 # === Handler Protocol ===
@@ -71,7 +78,7 @@ class MessageHandlerBase:
 
     async def handle(self, client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if self._raise_exceptions:
-            handle_response_with_exception(payload)
+            handle_response_with_exception(client, topic, payload)
         return await self._process(client, topic, payload)
 
     @property

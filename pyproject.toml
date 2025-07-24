@@ -21,8 +21,11 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-# testpaths = ["tests"]
+testpaths = ["tests"]
 pythonpath = ["src"]
 log_cli_level = "INFO"
 log_file_level = "DEBUG"
 log_file = "test.log"
+# addopts = [
+#     "--lf",  # run only failed tests
+# ]

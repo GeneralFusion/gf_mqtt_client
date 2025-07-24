@@ -329,7 +329,7 @@ class MQTTClient:
             )
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
-            raise GatewayTimeoutResponse()
+            raise GatewayTimeoutResponse(response_code=ResponseCode.GATEWAY_TIMEOUT.value, path=path, detail="Request timed out", source=self.identifier, target=target_device_tag)
         
         finally:
             await self._client.unsubscribe(response_topic)

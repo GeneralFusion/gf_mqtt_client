@@ -1,14 +1,11 @@
-import asyncio
 import time
 import logging
 
-from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig
+from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Public MQTT broker details
-# Replace with your actual broker details if needed.
 BROKER_CONFIG = MQTTBrokerConfig(
     hostname="broker.emqx.io",
     port=1883,
@@ -22,19 +19,23 @@ TARGET_DEVICE_TAG = "2D_XX_0_9999"
 
 # Request handler that processes incoming requests and sends a response.
 async def response_handler(client: SyncMQTTClient, topic: str, payload: dict) -> dict:
-    logging.info(f"Recevied response for request ID {payload['header']['request_id']} on topic {topic}")
+
+    logging.info(f"{client.identifier} Received response for request ID {payload['header']['request_id']} on topic {topic}")
+
+    # Add any additional processing or debugging here if needed
+
     return payload
 
-# Create an MQTT client that listens for requests and responds accordingly.
+# Create an MQTT client that sends requests and listens for responses.
 def create_mqtt_client():
     client = SyncMQTTClient(
         broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=5, identifier=REQUESTOR_TAG, username=BROKER_CONFIG.username, password=BROKER_CONFIG.password
     )
+    # Add the custom response handler for debugging responses
     client.add_message_handler(
         ResponseHandlerBase(process=response_handler, propagate=False)
     )
-    client.connect()
-    return client
+    return client.connect()
 
 
 def main():
@@ -42,9 +43,12 @@ def main():
     try:
         logging.info(f"Connected to MQTT broker as {REQUESTOR_TAG}. Listening for requests...")
         while True:
-            response = client.request(target_device_tag=TARGET_DEVICE_TAG, subsystem="axuv", path="gains", method="GET", timeout=5)
-            logging.info(f"Received response: {response}")
-            time.sleep(2)  
+            try:
+                response = client.request(target_device_tag=TARGET_DEVICE_TAG, subsystem="axuv", path="gains", method="GET", timeout=1)
+                logging.info(f"Received response: {response}")
+                time.sleep(2)  
+            except ResponseException as e:
+                logging.error(f"Protocol exception occurred: {e}")
     except KeyboardInterrupt:
         logging.info("Exiting...")
     finally:
