@@ -1,0 +1,81 @@
+{
+    "timestamp": 1752019244,
+    "metrics": [
+        {
+            "name": "AXUVTE99",
+            "timestamp": 1752019206,
+            "properties": {
+                    "source_name" : "AXUV_chan_1",
+                    "channel_id": 0,
+                    "ch_gain": 4,
+                    "ch_range": 5,
+                    "ch_offset": 0,
+                    "wave_byte_order": 0,
+                    "time_zero": 0,
+                    "time_range": 0,
+                    "acq_srate": 0,
+                    "acq_bit_res": 0,
+                    "acq_total_samples": 0,
+                    "checksum": 0
+            },
+            "data": "ABCDABCDABCD"
+        },
+        {
+            "name": "AXUVTE99",
+            "timestamp": 1752019206,
+            "properties": {
+                    "source_name" : "AXUV_chan_2",
+                    "channel_id": 1,
+                    "ch_gain": 4,
+                    "ch_range": 5,
+                    "ch_offset": 0,
+                    "wave_byte_order": 0,
+                    "time_zero": 0,
+                    "time_range": 0,
+                    "acq_srate": 0,
+                    "acq_bit_res": 0,
+                    "acq_total_samples": 0,
+                    "checksum": 0
+            },
+            "data": "ABCDABCDABCD"
+        },
+        {
+            "name": "AXUVTE99",
+            "timestamp": 1752019206,
+            "properties": {
+                    "source_name" : "AXUV_chan_3",
+                    "channel_id": 2,
+                    "ch_gain": 4,
+                    "ch_range": 5,
+                    "ch_offset": 0,
+                    "wave_byte_order": 0,
+                    "time_zero": 0,
+                    "time_range": 0,
+                    "acq_srate": 0,
+                    "acq_bit_res": 0,
+                    "acq_total_samples": 0,
+                    "checksum": 0
+            },
+            "data": "ABCDABCDABCD"
+        },
+        {
+            "name": "AXUVTE99",
+            "timestamp": 1752019206,
+            "properties": {
+                    "source_name" : "AXUV_chan_4",
+                    "channel_id": 3,
+                    "ch_gain": 4,
+                    "ch_range": 5,
+                    "ch_offset": 0,
+                    "wave_byte_order": 0,
+                    "time_zero": 0,
+                    "time_range": 0,
+                    "acq_srate": 0,
+                    "acq_bit_res": 0,
+                    "acq_total_samples": 0,
+                    "checksum": 0
+            },
+            "data": "ABCDABCDABCD"
+        }
+    ]
+}
