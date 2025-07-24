@@ -137,6 +137,75 @@ Each exception carries attributes:
 * `source`: origin of the error (e.g., client or broker)
 * `target`: intended request recipient
 
+## Customizing Behavior with Handlers
+
+Both the async and sync clients let you plug in custom logic before and after requests via **RequestHandlers** and **ResponseHandlers**.
+
+### Adding Request Handlers (Async)
+
+Before sending a request or when receiving an incoming message, you can intercept and modify the payload or implement side‑effects by registering a `RequestHandlerBase`:
+
+```python
+from gf_mqtt_client.message_handler import RequestHandlerBase
+
+async def my_request_interceptor(client, topic: str, payload: dict) -> dict:
+    # e.g. add a timestamp header or log the outgoing request
+    payload["header"]["timing"] = int(time.time() * 1000)
+    return payload
+
+await mqtt_client.add_message_handler(
+    RequestHandlerBase(
+        process=my_request_interceptor,
+        propagate=True  # True to continue to other handlers
+    )
+)
+```
+
+Use `propagate=False` to stop further handlers from running after yours.
+
+### Adding Response Handlers (Async)
+
+To handle responses centrally—log codes, raise on errors, or transform the body—use a `ResponseHandlerBase`:
+
+```python
+from gf_mqtt_client.message_handler import ResponseHandlerBase
+from gf_mqtt_client.exceptions import NotFoundResponse
+
+async def my_response_handler(client, topic: str, payload: dict) -> dict:
+    code = payload["header"]["response_code"]
+    if code == ResponseCode.NOT_FOUND.value:
+        # raise a typed exception
+        raise NotFoundResponse(path=payload["header"]["path"], detail="Resource missing")
+    # otherwise pass it along
+    return payload
+
+await mqtt_client.add_message_handler(
+    ResponseHandlerBase(
+        process=my_response_handler,
+        propagate=False,       # do not continue to default handler
+        raise_exceptions=True   # exceptions bubble up to request() caller
+    )
+)
+```
+
+### Customizing the Sync Wrapper
+
+The sync client exposes the same handler API (blocking under the hood). Just pass your async handlers into `add_message_handler`, and they’ll run in the background loop:
+
+```python
+client = SyncMQTTClient(...)
+# Handlers are added in the same way:
+client.add_message_handler(ResponseHandlerBase(process=my_response_handler, propagate=False))
+client.connect()
+```
+
+### Handler Ordering and Propagation
+
+* **Order matters**: handlers run in the sequence you register them.
+* **propagate=True**: after your handler returns, subsequent ones still run.
+* **propagate=False**: stops processing further handlers.
+* **raise\_exceptions (ResponseHandlerBase only)**: when True, any exception in your handler will be thrown back to the caller of `request()` or `publish()`.
+
 ## Validation
 
 * Payloads are validated using Pydantic models to ensure:
