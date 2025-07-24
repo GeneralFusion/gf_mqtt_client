@@ -89,6 +89,54 @@ The Response Payload is sent in response to a Request Payload, providing the res
   }
   ```
 
+## Response Codes
+
+The `ResponseCode` enum defines CoAP‑style status codes multiplied by 100 (per RFC 7252):
+
+| Name                         | Code | Description                          |
+| ---------------------------- | ---- | ------------------------------------ |
+| CREATED                      | 201  | Resource successfully created        |
+| DELETED                      | 202  | Resource successfully deleted        |
+| VALID                        | 203  | Valid request processed (no content) |
+| CHANGED                      | 204  | Resource successfully updated        |
+| CONTENT                      | 205  | Representation of resource           |
+| BAD\_REQUEST                 | 400  | Bad request                          |
+| UNAUTHORIZED                 | 401  | Unauthorized                         |
+| BAD\_OPTION                  | 402  | Bad option                           |
+| FORBIDDEN                    | 403  | Forbidden                            |
+| NOT\_FOUND                   | 404  | Resource not found                   |
+| METHOD\_NOT\_ALLOWED         | 405  | Method not allowed                   |
+| NOT\_ACCEPTABLE              | 406  | Not acceptable                       |
+| PRECONDITION\_FAILED         | 412  | Precondition failed                  |
+| REQUEST\_ENTITY\_TOO\_LARGE  | 413  | Request entity too large             |
+| UNSUPPORTED\_CONTENT\_FORMAT | 415  | Unsupported content format           |
+| INTERNAL\_SERVER\_ERROR      | 500  | Internal server error                |
+| NOT\_IMPLEMENTED             | 501  | Not implemented                      |
+| BAD\_GATEWAY                 | 502  | Bad gateway                          |
+| SERVICE\_UNAVAILABLE         | 503  | Service unavailable                  |
+| GATEWAY\_TIMEOUT             | 504  | Gateway timeout                      |
+| PROXYING\_NOT\_SUPPORTED     | 505  | Proxying not supported               |
+
+## Exceptions
+
+The client library uses a hierarchy of exceptions to signal errors based on response codes:
+
+* `ResponseException` (base class for all response errors)
+* `BadRequestResponse` (`400 Bad Request`)
+* `UnauthorizedResponse` (`401 Unauthorized`)
+* `NotFoundResponse` (`404 Not Found`)
+* `MethodNotAllowedResponse` (`405 Method Not Allowed`)
+* `InternalServerErrorResponse` (`500 Internal Server Error`)
+* `GatewayTimeoutResponse` (`504 Gateway Timeout`)
+
+Each exception carries attributes:
+
+* `response_code`: numeric status
+* `path`: the requested URI or topic
+* `detail`: any error message or payload
+* `source`: origin of the error (e.g., client or broker)
+* `target`: intended request recipient
+
 ## Validation
 
 * Payloads are validated using Pydantic models to ensure:
