@@ -1,12 +1,16 @@
+import time
 from typing import Any, Dict
 import pytest
 import asyncio
+import datetime
+
 from gf_mqtt_client.exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, GatewayTimeoutResponse
 from gf_mqtt_client.message_handler import ResponseHandlerBase
 from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
 from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
 from .conftest import RESPONDER_TAG, REQUESTOR_TAG
+
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
@@ -16,12 +20,18 @@ from datetime import datetime
 CURRENT_TIMESTAMP = int(datetime(2025, 6, 24, 14, 51).timestamp() * 1000)  # 02:51 PM PDT, June 24, 2025
 
 @pytest.mark.asyncio
-async def test_connect(mqtt_requester):
+async def test_connect(mqtt_requester, mqtt_responder):
     await mqtt_requester.connect()
     try:
         assert mqtt_requester._connected.is_set(), "Client failed to connect"
     finally:
         await mqtt_requester.disconnect()
+    
+    await mqtt_responder.connect()
+    try:
+        assert mqtt_responder._connected.is_set(), "Responder client failed to connect"
+    finally:
+        await mqtt_responder.disconnect()
 
 @pytest.mark.asyncio
 async def test_request_success(mqtt_responder, mqtt_requester):
@@ -48,7 +58,7 @@ async def test_request_timeout(mqtt_responder, mqtt_requester):
                 target_device_tag="nonexistent_device",
                 subsystem="nonexistent_subsystem",
                 path="nonexistent_path",
-                timeout=1
+                timeout=5
             )
     finally:
         await mqtt_requester.disconnect()
@@ -81,7 +91,7 @@ async def test_concurrent_requests_stress(mqtt_responder, mqtt_requester):
             assert "header" in resp and "response_code" in resp["header"]
             print(f"[{index}] Response: {resp['header']['response_code']}")
 
-        await asyncio.gather(*[send(i) for i in range(100)])  # Increase to stress more
+        await asyncio.gather(*[send(i) for i in range(1000)])  # Increase to stress more
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()
@@ -232,6 +242,205 @@ async def test_request_unauthorized_response(mqtt_responder, mqtt_requester):
                 path="unknown_path",
             )
 
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_put_then_get_effect(mqtt_responder, mqtt_requester):
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        # change sample_rate
+        new_rate = 12345
+        put_resp = await mqtt_requester.request(
+            target_device_tag=RESPONDER_TAG,
+            subsystem=TOPIC_SUBSYSTEM,
+            path="sample_rate",
+            method=Method.PUT,
+            value=new_rate
+        )
+        # Assert PUT succeeded
+        assert put_resp["header"]["response_code"] == ResponseCode.CHANGED.value
+
+        # Immediately GET the same URI
+        get_resp = await mqtt_requester.request(
+            target_device_tag=RESPONDER_TAG,
+            subsystem=TOPIC_SUBSYSTEM,
+            path="sample_rate",
+            method=Method.GET
+        )
+        assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
+        assert get_resp["body"] == new_rate
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+import copy
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("uri,new_value", [
+    ("gains", [9, 8, 7, 6, 5]),
+    ("sample_rate", 25000),
+])
+async def test_all_writable_uris_put_get(mqtt_responder, mqtt_requester, uri, new_value):
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        # Issue PUT
+        put_resp = await mqtt_requester.request(
+            target_device_tag=RESPONDER_TAG,
+            subsystem=TOPIC_SUBSYSTEM,
+            path=uri,
+            method=Method.PUT,
+            value=copy.deepcopy(new_value)
+        )
+        assert put_resp["header"]["response_code"] == ResponseCode.CHANGED.value
+
+        # Then GET and verify
+        get_resp = await mqtt_requester.request(
+            target_device_tag=RESPONDER_TAG,
+            subsystem=TOPIC_SUBSYSTEM,
+            path=uri,
+            method=Method.GET
+        )
+        assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
+        assert get_resp["body"] == new_value
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+import random
+
+@pytest.mark.asyncio
+async def test_concurrent_puts_stress(mqtt_responder, mqtt_requester):
+    """Fire off 1 000 PUTs in parallel, only checking for CHANGED."""
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        async def send(i):
+            payload = i  # or: [i, i, i, i, i] for gains
+            put = await mqtt_requester.request(
+                target_device_tag=RESPONDER_TAG,
+                subsystem=TOPIC_SUBSYSTEM,
+                path="sample_rate",        # or "gains"
+                method=Method.PUT,
+                value=payload
+            )
+            assert put["header"]["response_code"] == ResponseCode.CHANGED.value
+
+        await asyncio.gather(*[send(i) for i in range(1000)])
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+
+@pytest.mark.asyncio
+async def test_concurrent_gets_stress(mqtt_responder, mqtt_requester):
+    """Fire off 1 000 GETs in parallel and assert each one succeeds."""
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        async def send(i):
+            resp = await mqtt_requester.request(
+                target_device_tag=RESPONDER_TAG,
+                subsystem=TOPIC_SUBSYSTEM,
+                path="gains",              # read-only
+                method=Method.GET
+            )
+            # we only assert the status code, not the body
+            assert resp["header"]["response_code"] == ResponseCode.CONTENT.value
+
+        await asyncio.gather(*[send(i) for i in range(1000)])
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+# Timestamp used to verify freshness (optional)
+CURRENT_TS = int(time.time() * 1000)
+
+@pytest.mark.asyncio
+async def test_post_create_and_get_resource(mqtt_responder, mqtt_requester):
+    """
+    POST to the 'resources' collection should return 201 Created with a location,
+    and a subsequent GET to that location should return the original body.
+    """
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        payload = {"foo": "bar", "baz": 123}
+        # Issue POST
+        post_resp = await mqtt_requester.request(
+            target_device_tag=RESPONDER_TAG,
+            subsystem="axuv",            # or use TOPIC_SUBSYSTEM if imported
+            path="resources",
+            method=Method.POST,
+            value=payload,
+            timeout=5
+        )
+        hdr = post_resp["header"]
+        # Assert 201 Created
+        assert hdr["response_code"] == ResponseCode.CREATED.value
+        # Location header must be present and non-empty
+        assert "location" in hdr and isinstance(hdr["location"], str) and hdr["location"]
+        new_uri = hdr["location"]
+
+        # Now GET that new resource
+        get_resp = await mqtt_requester.request(
+            target_device_tag=RESPONDER_TAG,
+            subsystem="axuv",
+            path=new_uri,
+            method=Method.GET
+        )
+        assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
+        # Body must match the original payload
+        assert get_resp["body"] == payload
+        # Fresh timestamp
+        assert int(get_resp["timestamp"]) >= CURRENT_TS
+    finally:
+        await mqtt_requester.disconnect()
+        await mqtt_responder.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_post_create_resources_stress(mqtt_responder, mqtt_requester):
+    """
+    Fire off 500 concurrent POSTs to 'resources', each creating a unique URI,
+    then immediately GET each one and verify its body.
+    """
+    await mqtt_responder.connect()
+    await mqtt_requester.connect()
+    try:
+        async def worker(i):
+            body = f"stress_val_{i}"
+            # POST
+            post = await mqtt_requester.request(
+                target_device_tag=RESPONDER_TAG,
+                subsystem="axuv",
+                path="resources",
+                method=Method.POST,
+                value=body
+            )
+            assert post["header"]["response_code"] == ResponseCode.CREATED.value
+            uri = post["header"]["location"]
+
+            # GET
+            get = await mqtt_requester.request(
+                target_device_tag=RESPONDER_TAG,
+                subsystem="axuv",
+                path=uri,
+                method=Method.GET
+            )
+            assert get["header"]["response_code"] == ResponseCode.CONTENT.value
+            assert get["body"] == body
+
+        # launch 500 workers in parallel
+        await asyncio.gather(*[worker(i) for i in range(500)])
     finally:
         await mqtt_requester.disconnect()
         await mqtt_responder.disconnect()

@@ -2,7 +2,7 @@
 name = "gf-mqtt-client"
 version = "0.1.0"
 description = "A Python module for MQTT communication inspired by CoAP, with async support and microcontroller compatibility."
-authors = [{ name = "Your Name", email = "your.email@example.com" }]
+authors = [{ name = "Matthew Davidson", email = "matthew.davidson@generalfusiuon.com" }]
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -20,5 +20,8 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# testpaths = ["tests"]
 pythonpath = ["src"]
+log_cli_level = "INFO"
+log_file_level = "DEBUG"
+log_file = "test.log"

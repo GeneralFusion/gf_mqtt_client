@@ -106,6 +106,11 @@ class MQTTClient:
         await self.add_message_handler(ResponseHandlerDefault())
         logging.debug(f"Added default response handler for client {self.identifier}")
 
+    @property
+    def is_connected(self) -> bool:
+        """Check if the client is connected."""
+        return self._connected.is_set()
+
     async def disconnect(self):
         logging.info(f"Disconnecting MQTT client {self.identifier}")
         if self._client_task:
