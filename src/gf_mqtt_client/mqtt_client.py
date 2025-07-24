@@ -288,10 +288,10 @@ class MQTTClient:
         request_id = self.generate_request_id()
         logging.debug(f"Generated request ID {request_id} for client {self.identifier}")
 
-        if method != Method.GET:
+        if method == Method.PUT:
             if value is None:
                 logging.error(f"Cannot send {method} request: value is required")
-                raise ValueError("Value is required for non-GET requests")
+                raise ValueError("Value is required for PUT requests")
 
         request_payload = payload_handler.create_request_payload(
             method=method, path=path, request_id=request_id, body=value
