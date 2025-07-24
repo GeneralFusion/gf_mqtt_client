@@ -39,7 +39,7 @@ def create_response(request_payload: dict) -> dict:
 async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict:
     response = create_response(payload)
     # print in red text
-    print(f"\033[91m[{DEVICE_TAG}] Responding to {payload['header']['request_id']}\033[0m")
+    logging.info(f"\033[91m[{DEVICE_TAG}] Responding to {payload['header']['request_id']}\033[0m")
     response_topic = TopicManager().build_response_topic(
         request_topic=topic
     )
@@ -61,12 +61,12 @@ async def create_mqtt_client():
 async def main():
     client = await create_mqtt_client()
     try:
-        print(f"Connected to MQTT broker as {DEVICE_TAG}. Listening for requests...")
+        logging.info(f"Connected to MQTT broker as {DEVICE_TAG}. Listening for requests...")
         while True:
             await client.request(target_device_tag=DEVICE_TAG, subsystem="example", path="mock")
             await asyncio.sleep(2)  
     except KeyboardInterrupt:
-        print("Exiting...")
+        logging.info("Exiting...")
     finally:
         await client.disconnect()
 

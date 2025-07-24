@@ -7,13 +7,16 @@ This module provides a Python-based implementation for MQTT communication inspir
 The module defines three types of payloads: **General Payload**, **Request Payload**, and **Response Payload**. Each payload is validated using Pydantic models to ensure data integrity and consistency.
 
 ### General Payload
+
 The General Payload is used for standard publish-subscribe messaging with customizable content.
 
-- **Structure**:
-  - `body` (int | float | str | array): Contains the data being transmitted. The keys and values depend on the information being passed (e.g., `{"state": "ONLINE", "last_updated": "1745534869619"}`).
-  - `timestamp` (int64 | str): Epoch time in milliseconds, represented as a 64-bit signed integer or a string to support 32-bit microcontrollers (e.g., `"1745534869619"`).
+* **Structure**:
 
-- **Example**:
+  * `body` (int | float | str | array): Contains the data being transmitted. The keys and values depend on the information being passed (e.g., `{"state": "ONLINE", "last_updated": "1745534869619"}`).
+  * `timestamp` (int64 | str): Epoch time in milliseconds, represented as a 64-bit signed integer or a string to support 32-bit microcontrollers (e.g., `"1745534869619"`).
+
+* **Example**:
+
   ```json
   {
     "body": {
@@ -25,19 +28,23 @@ The General Payload is used for standard publish-subscribe messaging with custom
   ```
 
 ### Request Payload
+
 The Request Payload is used to initiate a request (e.g., GET) to a specific device, mimicking CoAP's request-response paradigm.
 
-- **Structure**:
-  - `header` (object):
-    - `method` (int | str): Specifies the request method. Valid values are `1` or `"GET"`, `2` or `"POST"`, `3` or `"PUT"`, `4` or `"DELETE"`.
-    - `path` (str): The resource path (e.g., `"gains"`).
-    - `request_id` (str): A 128-bit / 32-character hexadecimal string (e.g., `"16fd2706-8baf-433b-82eb-8c7fada847da"`).
-    - `token` (Optional: str): An authentication token (e.g., `"123456789=="`).
-    - `correlation_id` (Optional: str): A 128-bit / 32-character hexadecimal string for batching messages (e.g., `"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"`) or absent/null.
-  - `body` (Optional: int | float | str | array | JSON): The payload body, used with the selected method (e.g., `[0, 1, 2, 3, 4]` or `{"data": [0, 1, 2]}`).
-  - `timestamp` (int64 | str): Epoch time in milliseconds (e.g., `"1745534869619"`).
+* **Structure**:
 
-- **Example**:
+  * `header` (object):
+
+    * `method` (int | str): Specifies the request method. Valid values are `1` or `"GET"`, `2` or `"POST"`, `3` or `"PUT"`, `4` or `"DELETE"`.
+    * `path` (str): The resource path (e.g., `"gains"`).
+    * `request_id` (str): A 128-bit / 32-character hexadecimal string (e.g., `"16fd2706-8baf-433b-82eb-8c7fada847da"`).
+    * `token` (Optional: str): An authentication token (e.g., `"123456789=="`).
+    * `correlation_id` (Optional: str): A 128-bit / 32-character hexadecimal string for batching messages (e.g., `"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"`) or absent/null.
+  * `body` (Optional: int | float | str | array | JSON): The payload body, used with the selected method (e.g., `[0, 1, 2, 3, 4]` or `{"data": [0, 1, 2]}`).
+  * `timestamp` (int64 | str): Epoch time in milliseconds (e.g., `"1745534869619"`).
+
+* **Example**:
+
   ```json
   {
     "header": {
@@ -53,18 +60,22 @@ The Request Payload is used to initiate a request (e.g., GET) to a specific devi
   ```
 
 ### Response Payload
+
 The Response Payload is sent in response to a Request Payload, providing the result of the requested action.
 
-- **Structure**:
-  - `header` (object):
-    - `response_code` (int): The response code from the server, based on CoAP codes multiplied by 100 (e.g., `205` for Content).
-    - `path` (str): The resource path (e.g., `"gains"`), matching the request.
-    - `request_id` (str): Copied from the request payload (e.g., `"16fd2706-8baf-433b-82eb-8c7fada847da"`).
-    - `correlation_id` (Optional: str): Copied from the request payload if present (e.g., `"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"`) or absent/null.
-  - `body` (int | float | str | array): The response data (e.g., `[0, 1, 2, 3, 4]`).
-  - `timestamp` (int64 | str): Epoch time in milliseconds (e.g., `"1745534869619"`).
+* **Structure**:
 
-- **Example**:
+  * `header` (object):
+
+    * `response_code` (int): The response code from the server, based on CoAP codes multiplied by 100 (e.g., `205` for Content).
+    * `path` (str): The resource path (e.g., `"gains"`), matching the request.
+    * `request_id` (str): Copied from the request payload (e.g., `"16fd2706-8baf-433b-82eb-8c7fada847da"`).
+    * `correlation_id` (Optional: str): Copied from the request payload if present (e.g., `"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"`) or absent/null.
+  * `body` (int | float | str | array): The response data (e.g., `[0, 1, 2, 3, 4]`).
+  * `timestamp` (int64 | str): Epoch time in milliseconds (e.g., `"1745534869619"`).
+
+* **Example**:
+
   ```json
   {
     "header": {
@@ -79,18 +90,149 @@ The Response Payload is sent in response to a Request Payload, providing the res
   ```
 
 ## Validation
-- Payloads are validated using Pydantic models to ensure:
-  - `request_id` and `correlation_id` are 32-character hexadecimal strings.
-  - `method` matches the defined enum values (1-4 or "GET"/"POST"/"PUT"/"DELETE").
-  - `response_code` matches the defined CoAP-based codes.
-  - `timestamp` is a valid integer or string representation of an integer.
-- The `PayloadHandler` class automatically determines the payload type (General, Request, or Response) based on the presence of `method` or `response_code` in the header.
+
+* Payloads are validated using Pydantic models to ensure:
+
+  * `request_id` and `correlation_id` are 32-character hexadecimal strings.
+  * `method` matches the defined enum values (1-4 or "GET"/"POST"/"PUT"/"DELETE").
+  * `response_code` matches the defined CoAP-based codes.
+  * `timestamp` is a valid integer or string representation of an integer.
+* The `PayloadHandler` class automatically determines the payload type (General, Request, or Response) based on the presence of `method` or `response_code` in the header.
 
 ## Usage
-- Use the `PayloadHandler` class to create and validate payloads:
-  - `create_general_payload(body, timestamp)`
-  - `create_request_payload(method, path, request_id, body=None, token=None, correlation_id=None)`
-  - `create_response_payload(response_code, path, request_id, body, correlation_id=None)`
-  - `validate_payload(payload)` to check payload structure
-  - `parse_payload(json_string)` to parse and validate JSON strings
+
+### Asynchronous Client (asyncio)
+
+Below is an example of how to use the **async** client to send and respond to requests:
+
+```python
+import asyncio
+import time
+import logging
+
+from gf_mqtt_client.mqtt_client import MQTTClient
+from gf_mqtt_client.message_handler import RequestHandlerBase
+from gf_mqtt_client.topic_manager import TopicManager
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+PUBLIC_BROKER = "broker.emqx.io"
+PUBLIC_PORT = 1883
+DEVICE_TAG = "2D_XX_0_9999"
+
+# Generate a mock response for incoming requests
+async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict:
+    response = {
+        "header": {
+            "response_code": 205,
+            "path": payload["header"]["path"],
+            "request_id": payload["header"]["request_id"],
+            "correlation_id": payload["header"].get("correlation_id"),
+        },
+        "body": [0, 1, 2, 3, 4],
+        "timestamp": str(int(time.time() * 1000)),
+    }
+    print(f"[Responder] Responding to {payload['header']['request_id']}")
+    response_topic = TopicManager().build_response_topic(request_topic=topic)
+    await client.publish(response_topic, response)
+    return response
+
+async def main():
+    client = MQTTClient(
+        broker=PUBLIC_BROKER,
+        port=PUBLIC_PORT,
+        timeout=5,
+        identifier=DEVICE_TAG
+    )
+    # Register request handler
+    await client.add_message_handler(RequestHandlerBase(process=request_handler, propagate=False))
+    await client.connect()
+
+    try:
+        print(f"Connected as {DEVICE_TAG}, sending GET to itself every 2s...")
+        while True:
+            resp = await client.request(target_device_tag=DEVICE_TAG, subsystem="example", path="mock")
+            print(f"Received: {resp}")
+            await asyncio.sleep(2)
+    except KeyboardInterrupt:
+        print("Exiting...")
+    finally:
+        await client.disconnect()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
+
+---
+
+### Synchronous Client (blocking)
+
+The sync wrapper runs the async client in a background thread, exposing blocking methods:
+
+```python
+# main_sync.py
+import time
+import logging
+
+from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+BROKER_CONFIG = MQTTBrokerConfig(
+    hostname="broker.emqx.io",
+    port=1883,
+    username="user",
+    password=""
+)
+
+REQUESTOR_TAG = "2D_XX_0_9998"
+TARGET_DEVICE_TAG = "2D_XX_0_9999"
+
+# Example response handler for debugging
+async def response_handler(client, topic: str, payload: dict) -> dict:
+    logging.info(f"{client.identifier} got response {payload['header']['request_id']} on {topic}")
+    return payload
+
+if __name__ == "__main__":
+    client = SyncMQTTClient(
+        broker=BROKER_CONFIG.hostname,
+        port=BROKER_CONFIG.port,
+        timeout=5,
+        identifier=REQUESTOR_TAG,
+        username=BROKER_CONFIG.username,
+        password=BROKER_CONFIG.password
+    )
+    # Attach handler
+    client.add_message_handler(ResponseHandlerBase(process=response_handler, propagate=False))
+    client.connect()
+
+    try:
+        logging.info(f"Connected as {REQUESTOR_TAG}, polling every 2s...")
+        while True:
+            try:
+                resp = client.request(target_device_tag=TARGET_DEVICE_TAG, subsystem="axuv", path="gains")
+                logging.info(f"Received: {resp}")
+            except ResponseException as e:
+                logging.error(f"Protocol error: {e}")
+            time.sleep(2)
+    except KeyboardInterrupt:
+        logging.info("Exiting...")
+    finally:
+        client.disconnect()
+```
+
+---
+
+## Validation
+
+* Use the `PayloadHandler` class to create and validate payloads:
+
+  * `create_general_payload(body, timestamp)`
+  * `create_request_payload(method, path, request_id, body=None, token=None, correlation_id=None)`
+  * `create_response_payload(response_code, path, request_id, body, correlation_id=None)`
+  * `validate_payload(payload)` to check payload structure
+  * `parse_payload(json_string)` to parse and validate JSON strings
+
+---
+
+For more details, refer to the docstrings and Pydantic models in each module.
