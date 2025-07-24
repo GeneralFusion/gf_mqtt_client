@@ -14,6 +14,29 @@ from .message_handler import (
 )
 from .exceptions import ResponseException, GatewayTimeoutResponse
 
+def parse_method(method: Any) -> Method:
+    """
+    Convert method to Method enum if it's not already.
+    """
+    if isinstance(method, Method):
+        return method
+    if isinstance(method, str):
+        try:
+            method = Method[method.upper()]
+        except KeyError:
+            logging.error(f"Invalid method: {method}")
+            raise ValueError(f"Invalid method: {method}")
+    elif isinstance(method, int):
+        try:
+            method = Method(method)
+        except ValueError:
+            logging.error(f"Invalid method value: {method}")
+            raise ValueError(f"Invalid method value: {method}")
+    else:
+        logging.error(f"Method must be an int or str, got {type(method)}")
+        raise ValueError(f"Method must be an int or str, got {type(method)}")
+    return method
+    
 class MQTTClient:
     def __init__(
         self,
@@ -251,6 +274,10 @@ class MQTTClient:
     async def request(
         self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int = None
     ) -> Optional[Dict[str, Any]]:
+        
+        # if method is not enum, then convert it to Method enum
+        method = parse_method(method)
+
         if not self._connected.is_set():
             logging.error(
                 f"Cannot send request: Client {self.identifier} is not connected"
