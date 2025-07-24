@@ -1,6 +1,7 @@
 # conftest.py
 
 import logging
+import os
 import pytest_asyncio
 import time
 from typing import Any, Dict
@@ -10,11 +11,14 @@ from gf_mqtt_client.mqtt_client import MQTTClient
 from gf_mqtt_client.message_handler import ResponseHandlerBase, RequestHandlerBase
 from gf_mqtt_client.topic_manager import TopicManager
 
+from dotenv import load_dotenv
+load_dotenv()
+
 BROKER_CONFIG = MQTTBrokerConfig(
-    username="user",
-    password="goodlinerCompressi0n!",
-    hostname="lm26consys.gf.local",
-    port=1893
+    username=os.getenv("MQTT_BROKER_USERNAME"),
+    password=os.getenv("MQTT_BROKER_PASSWORD"),
+    hostname=os.getenv("MQTT_BROKER_HOSTNAME"),
+    port=int(os.getenv("MQTT_BROKER_PORT", 1883))
 )
 
 RESPONDER_TAG = "2D_XX_0_9999"
