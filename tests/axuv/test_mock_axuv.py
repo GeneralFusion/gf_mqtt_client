@@ -1,4 +1,6 @@
+import json
 import logging
+import time
 from pydantic_core import ValidationError
 import pytest
 from gf_mqtt_client import MQTTClient
@@ -80,58 +82,58 @@ def test_mock_axuv_device(mock_axuv_device):
     assert isinstance(mock_axuv_device.status, dict)
     assert mock_axuv_device.status["state"] == "IDLE"
 
-def test_adjust_data_length(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_responder):
+def test_adjust_data_length(mock_axuv_device, requestor, responder):
     """Test adjusting the data length of the mock AXUV device."""
     try:
-        response = adjust_data_length_via_request(sync_mqtt_requestor, sync_mqtt_responder, 10)
+        response = adjust_data_length_via_request(requestor, responder, 10)
         assert response is not None
         assert "body" in response
         assert mock_axuv_device.data_length == 10
 
-        data = capture_data_via_request(sync_mqtt_requestor, sync_mqtt_responder)
+        data = capture_data_via_request(requestor, responder)
         assert data is not None
         assert all(len(data["metrics"][i]["data"]) == 4*10 for i in range(4)), f"Expected 100 metrics for all channels, got {[len(data['metrics'][i]['data']) for i in range(4)]}"
 
-        response = adjust_data_length_via_request(sync_mqtt_requestor, sync_mqtt_responder, 100)
+        response = adjust_data_length_via_request(requestor, responder, 100)
         assert response is not None
         assert "body" in response
         assert mock_axuv_device.data_length == 100
 
-        data = capture_data_via_request(sync_mqtt_requestor, sync_mqtt_responder)
+        data = capture_data_via_request(requestor, responder)
         assert data is not None
         assert all(len(data["metrics"][i]["data"]) == 4*100 for i in range(4)), f"Expected 100 metrics for all channels, got {[len(data['metrics'][i]['data']) for i in range(4)]}"
 
     except Exception as e:
         pytest.fail(f"Test failed due to unexpected error: {e}")
 
-def test_arm_device(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_responder):
+def test_arm_device(mock_axuv_device, requestor, responder):
     """Test the arm functionality of the mock AXUV device."""
     initial_state = mock_axuv_device.status["state"]
     try:
-        response = arm_device_via_request(source=sync_mqtt_requestor, target=sync_mqtt_responder)
+        response = arm_device_via_request(source=requestor, target=responder)
         assert mock_axuv_device.status["state"] == "ARMED"
         assert initial_state != mock_axuv_device.status["state"]
     except Exception as e:
         pytest.fail(f"Test failed due to unexpected error: {e}")
 
-def test_trigger_device(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_responder):
+def test_trigger_device(mock_axuv_device, requestor, responder):
     """Test the trigger functionality of the mock AXUV device."""
     initial_state = mock_axuv_device.status["state"]
     try:
-        arm_device_via_request(source=sync_mqtt_requestor, target=sync_mqtt_responder)
-        trigger_device_via_request(source=sync_mqtt_requestor, target=sync_mqtt_responder)
+        arm_device_via_request(source=requestor, target=responder)
+        trigger_device_via_request(source=requestor, target=responder)
         assert mock_axuv_device.status["state"] == "TRIGGERED"
         assert initial_state != mock_axuv_device.status["state"]
     except Exception as e:
         pytest.fail(f"Test failed due to unexpected error: {e}")
 
 
-def test_get_data_from_device(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_responder):
+def test_get_data_from_device(mock_axuv_device, requestor, responder):
     """Test getting data from the mock AXUV device."""
     try:
-        arm_device_via_request(source=sync_mqtt_requestor, target=sync_mqtt_responder)
-        trigger_device_via_request(source=sync_mqtt_requestor, target=sync_mqtt_responder)
-        response = fetch_device_data_via_request(source=sync_mqtt_requestor, target=sync_mqtt_responder)
+        arm_device_via_request(source=requestor, target=responder)
+        trigger_device_via_request(source=requestor, target=responder)
+        response = fetch_device_data_via_request(source=requestor, target=responder)
         assert response is not None
         assert "body" in response
     
@@ -146,17 +148,26 @@ def test_get_data_from_device(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_r
         pytest.fail(f"Test failed due to unexpected error: {e}")
 
 
-def test_large_data_length(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_responder):
+@pytest.mark.parametrize("data_length", [1024, 10 * 1024, 32 * 1024, 48 * 1024, 64 * 1024, 80 * 1024, 96 * 1024])
+def test_large_data_length(mock_axuv_device, requestor, responder, data_length):
     """Test setting a large data length on the mock AXUV device."""
     try:
-        response = adjust_data_length_via_request(sync_mqtt_requestor, sync_mqtt_responder, 32768)
+        start_time = time.time()
+        response = adjust_data_length_via_request(requestor, responder, data_length)
         assert response is not None
         assert "body" in response
-        assert mock_axuv_device.data_length == 32768
+        assert mock_axuv_device.data_length == data_length
 
-        data = capture_data_via_request(sync_mqtt_requestor, sync_mqtt_responder)
+        data = capture_data_via_request(requestor, responder)
         assert data is not None
-        assert all(len(data["metrics"][i]["data"]) == 4*32768 for i in range(4)), f"Expected 131072 metrics for all channels, got {[len(data['metrics'][i]['data']) for i in range(4)]}"
+        # measure byte size of payload
+        payload_str = json.dumps(data)
+        payload_size = len(payload_str.encode('utf-8'))
+        logging.info(f"Payload size for data length {data_length}: {payload_size} bytes")
+        assert len(data["metrics"]) == 4, "Expected 4 metrics for all channels"
 
+        assert all(len(data["metrics"][i]["data"]) == 4*data_length for i in range(4)), f"Expected {4*data_length} metrics for all channels, got {[len(data['metrics'][i]['data']) for i in range(4)]}"
+        elapsed_time = time.time() - start_time
+        logging.info(f"Data capture for length {data_length} took {elapsed_time:.2f} seconds")
     except Exception as e:
         pytest.fail(f"Test failed due to unexpected error: {e}")

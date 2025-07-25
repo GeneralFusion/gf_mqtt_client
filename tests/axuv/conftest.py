@@ -6,15 +6,14 @@ from gf_mqtt_client.mqtt_client import MQTTClient
 from gf_mqtt_client.sync_mqtt_client import SyncMQTTClient
 from mock_device import MockAXUVDevice
 from gf_mqtt_client.topic_manager import TopicManager
-from tests.conftest import BROKER_CONFIG
+from tests.conftest import BROKER_CONFIG, generate_uuid
 
-
-REQUESTOR_TAG = "MOCK_AXUV_CLIENT"
-RESPONDER_TAG = "MOCK_AXUV_DEVICE"
+REQUESTOR_TAG = "axuv_requestor-"
+RESPONDER_TAG = "axuv_responder-"
 SUBSYSTEM = "axuv"
 
-
 MOCK_AXUV_DEVICE = MockAXUVDevice()
+DEFAULT_TIMEOUT = 10
 
 @pytest.fixture(scope="module")
 def mock_axuv_device():
@@ -74,17 +73,20 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
 
 
 
-@pytest.fixture(scope="module")
-def sync_mqtt_requestor():  # mqtt_client is your async one with test responder
+@pytest.fixture(scope="function")
+def requestor():  # mqtt_client is your async one with test responder
+    identifier = REQUESTOR_TAG + generate_uuid()
+
     yield SyncMQTTClient(
-        broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=5, identifier=REQUESTOR_TAG, username=BROKER_CONFIG.username, password=BROKER_CONFIG.password
+        broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=DEFAULT_TIMEOUT, identifier=identifier, username=BROKER_CONFIG.username, password=BROKER_CONFIG.password
     ).connect()
 
 
-@pytest.fixture(scope="module")
-def sync_mqtt_responder():
+@pytest.fixture(scope="function")
+def responder():
+    identifier = RESPONDER_TAG + generate_uuid()
     client = SyncMQTTClient(
-        broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=3, identifier=RESPONDER_TAG
+        broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=DEFAULT_TIMEOUT, identifier=identifier
     )
     client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
     client.add_message_handler(handler=RequestHandlerBase(process=request_handler, propagate=False))

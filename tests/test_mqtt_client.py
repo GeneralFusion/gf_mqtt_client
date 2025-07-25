@@ -9,7 +9,6 @@ from gf_mqtt_client.message_handler import ResponseHandlerBase
 from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
 from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
-# from .conftest import RESPONDER_TAG, REQUESTOR_TAG
 
 
 TOPIC_SUBSYSTEM = "axuv"

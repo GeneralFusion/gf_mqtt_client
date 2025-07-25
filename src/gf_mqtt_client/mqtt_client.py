@@ -1,9 +1,10 @@
 import asyncio
 import json
+import sys
 import uuid
 from typing import Optional, Dict, Any, Callable, Awaitable, List
 import logging
-from aiomqtt import Client
+from aiomqtt import Client, MqttError
 from .models import ResponseCode, Method
 from .payload_handler import PayloadHandler
 from .topic_manager import TopicManager
@@ -13,6 +14,38 @@ from .message_handler import (
     ResponseHandlerDefault,
 )
 from .exceptions import ResponseException, GatewayTimeoutResponse
+import warnings
+
+
+def ensure_compatible_event_loop_policy():
+    if sys.platform.startswith("win"):
+        current_policy = asyncio.get_event_loop_policy()
+        if not isinstance(current_policy, asyncio.WindowsSelectorEventLoopPolicy):
+            warnings.warn(
+                "Your current event loop policy may not support all features "
+                "on Windows. Consider setting:\n"
+                "  asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())",
+                RuntimeWarning,
+            )
+
+def set_compatible_event_loop_policy():
+    """
+    Set the event loop policy to WindowsSelectorEventLoopPolicy if on Windows.
+    This is necessary for compatibility with asyncio and aiomqtt.
+    """
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        logging.info("Set event loop policy to WindowsSelectorEventLoopPolicy for compatibility.")
+    else:
+        logging.info("No special event loop policy set for non-Windows platform.")
+
+def reset_event_loop_policy():
+    """
+    Reset the event loop policy to the default.
+    This is useful for tests or when changing policies dynamically.
+    """
+    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+    logging.info("Reset event loop policy to DefaultEventLoopPolicy.")
 
 def parse_method(method: Any) -> Method:
     """
@@ -36,7 +69,7 @@ def parse_method(method: Any) -> Method:
         logging.error(f"Method must be an int or str, got {type(method)}")
         raise ValueError(f"Method must be an int or str, got {type(method)}")
     return method
-    
+
 class MQTTClient:
     def __init__(
         self,
@@ -63,6 +96,8 @@ class MQTTClient:
         self._topic_manager = TopicManager()
         self.subscriptions = subscriptions or []
         logging.info(f"Initialized MQTT client with identifier {self.identifier}")
+
+        ensure_compatible_event_loop_policy()
 
     def set_credentials(self, username: str, password: str):
         self._username = username
@@ -111,11 +146,20 @@ class MQTTClient:
             password=self._password,
             identifier=self.identifier,
         )
-        await self._client.__aenter__()
-        logging.info(f"Connected to broker with client {self.identifier}")
+        try:
+            await self._client.__aenter__()
+            logging.info(f"Connected to broker with client {self.identifier}")
 
-        self._client_task = asyncio.create_task(self._message_loop())
-        self._connected.set()
+            self._client_task = asyncio.create_task(self._message_loop())
+            self._connected.set()
+        except MqttError as e:
+            logging.error(f"Failed to connect to broker: {e}")
+            raise GatewayTimeoutResponse(
+                response_code=ResponseCode.GATEWAY_TIMEOUT.value,
+                path="",
+                detail=str(e),
+                source=self.identifier,
+            )
 
         request_topic = self._topic_manager.build_request_topic(
             target_device_tag=self.identifier, subsystem="+", request_id="+"
@@ -136,13 +180,7 @@ class MQTTClient:
     def is_connected(self) -> bool:
         """Check if the client is connected."""
         return self._connected.is_set()
-    
-    async def ensure_connected(self):
-        while not self.is_connected:
-            logging.warning(
-                f"Client {self.identifier} is not connected, waiting for connection..."
-            )
-            await asyncio.sleep(0.1)
+
 
     async def disconnect(self):
         logging.info(f"Disconnecting MQTT client {self.identifier}")
@@ -166,7 +204,7 @@ class MQTTClient:
                 payload = json.loads(payload_str)
                 topic = message.topic
                 logging.debug(
-                    f"Received message on topic {topic} with payload {payload} for client {self.identifier}",
+                    f"Received message on topic {topic} with payload {self._truncate_str(payload)} for client {self.identifier}",
                     extra={
                         "payload": payload,
                         "request_id": payload.get("header", {}).get("request_id"),

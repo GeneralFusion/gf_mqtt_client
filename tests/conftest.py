@@ -3,17 +3,30 @@
 import logging
 import os
 import uuid
+import pytest
 import pytest_asyncio
 import time
 from typing import Any, Dict
 
 from gf_mqtt_client.models import Method, ResponseCode, MQTTBrokerConfig
-from gf_mqtt_client.mqtt_client import MQTTClient
+from gf_mqtt_client.mqtt_client import MQTTClient, set_compatible_event_loop_policy, reset_event_loop_policy
 from gf_mqtt_client.message_handler import ResponseHandlerBase, RequestHandlerBase
 from gf_mqtt_client.topic_manager import TopicManager
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# Hook into pytest configuration to set the event loop policy
+# this is necessary for compatibility with asyncio and aiomqtt with Windows and modern Python versions.
+def pytest_configure(config):
+    """Configure pytest to use the asyncio event loop."""
+    set_compatible_event_loop_policy()
+
+
+def pytest_unconfigure(config):
+    """Reset the event loop policy after tests."""
+    reset_event_loop_policy()
+
 
 BROKER_CONFIG = MQTTBrokerConfig(
     username=os.getenv("MQTT_BROKER_USERNAME"),
