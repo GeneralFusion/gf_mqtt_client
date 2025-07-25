@@ -13,13 +13,12 @@ RESPONDER_TAG = "axuv_responder-"
 SUBSYSTEM = "axuv"
 
 MOCK_AXUV_DEVICE = MockAXUVDevice()
-DEFAULT_TIMEOUT = 10
 
 @pytest.fixture(scope="module")
 def mock_axuv_device():
     """Fixture to provide a mock AXUV device."""
     yield MOCK_AXUV_DEVICE
-    
+
 def create_response(request_payload: dict) -> dict:
     header = request_payload["header"]
     path = header["path"]
@@ -71,24 +70,31 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
     return response
 
 
-
-
 @pytest.fixture(scope="function")
 def requestor():  # mqtt_client is your async one with test responder
-    identifier = REQUESTOR_TAG + generate_uuid()
 
     yield SyncMQTTClient(
-        broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=DEFAULT_TIMEOUT, identifier=identifier, username=BROKER_CONFIG.username, password=BROKER_CONFIG.password
+        broker=BROKER_CONFIG.hostname,
+        port=BROKER_CONFIG.port,
+        timeout=BROKER_CONFIG.timeout,
+        identifier='requestor',
+        username=BROKER_CONFIG.username,
+        password=BROKER_CONFIG.password,
+        ensure_unique_identifier=True
     ).connect()
 
 
 @pytest.fixture(scope="function")
 def responder():
-    identifier = RESPONDER_TAG + generate_uuid()
     client = SyncMQTTClient(
-        broker=BROKER_CONFIG.hostname, port=BROKER_CONFIG.port, timeout=DEFAULT_TIMEOUT, identifier=identifier
+        broker=BROKER_CONFIG.hostname,
+        port=BROKER_CONFIG.port,
+        timeout=BROKER_CONFIG.timeout,
+        identifier='responder',
+        username=BROKER_CONFIG.username,
+        password=BROKER_CONFIG.password,
+        ensure_unique_identifier=True
     )
-    client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
     client.add_message_handler(handler=RequestHandlerBase(process=request_handler, propagate=False))
 
     yield client.connect()

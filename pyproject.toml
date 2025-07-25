@@ -1,10 +1,10 @@
 [project]
 name = "gf-mqtt-client"
-version = "0.1.0"
+version = "0.0.2"
 description = "A Python module for MQTT communication inspired by CoAP, with async support and microcontroller compatibility."
 authors = [{ name = "Matthew Davidson", email = "matthew.davidson@generalfusiuon.com" }]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "aiomqtt>=2.4.0",

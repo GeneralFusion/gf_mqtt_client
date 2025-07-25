@@ -19,7 +19,7 @@ class SyncMQTTClient:
     
     def __init__(self, broker: str, port: int = 1883, timeout: int = 5, 
                  identifier: Optional[str] = None, subscriptions: Optional[list] = None,
-                 username: Optional[str] = None, password: Optional[str] = None):
+                 username: Optional[str] = None, password: Optional[str] = None, ensure_unique_identifier: bool = False):
         """
         Initialize the synchronous MQTT client wrapper.
         
@@ -39,7 +39,8 @@ class SyncMQTTClient:
             identifier=identifier,
             subscriptions=subscriptions,
             username=username,
-            password=password
+            password=password,
+            ensure_unique_identifier=ensure_unique_identifier
         )
         
         self._loop = None

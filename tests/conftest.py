@@ -182,12 +182,12 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
 
 @pytest_asyncio.fixture(scope="function")
 async def responder():
-    identifier = "responder-" + generate_uuid()
     client = MQTTClient(
         broker=BROKER_CONFIG.hostname,
         port=BROKER_CONFIG.port,
         timeout=10,
-        identifier=identifier
+        identifier='responder',
+        ensure_unique_identifier=True
     )
     client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
     await client.add_message_handler(
@@ -200,12 +200,12 @@ async def responder():
 
 @pytest_asyncio.fixture(scope="function")
 async def requester():
-    identifier = "requester-" + generate_uuid()
     client = MQTTClient(
         broker=BROKER_CONFIG.hostname,
         port=BROKER_CONFIG.port,
         timeout=10,
-        identifier=identifier
+        identifier='requester',
+        ensure_unique_identifier=True
     )
     client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
 
