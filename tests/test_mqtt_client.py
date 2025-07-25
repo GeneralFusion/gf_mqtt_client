@@ -9,7 +9,7 @@ from gf_mqtt_client.message_handler import ResponseHandlerBase
 from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
 from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
-from .conftest import RESPONDER_TAG, REQUESTOR_TAG
+# from .conftest import RESPONDER_TAG, REQUESTOR_TAG
 
 
 TOPIC_SUBSYSTEM = "axuv"
@@ -20,262 +20,199 @@ MAX_REQUESTS = 100  # Maximum concurrent requests for stress tests
 CURRENT_TIMESTAMP = int(datetime(2025, 6, 24, 14, 51).timestamp() * 1000)  # 02:51 PM PDT, June 24, 2025
 
 @pytest.mark.asyncio
-async def test_connect(mqtt_requester, mqtt_responder):
-    await mqtt_requester.connect()
-    try:
-        assert mqtt_requester._connected.is_set(), "Client failed to connect"
-    finally:
-        await mqtt_requester.disconnect()
-    
-    await mqtt_responder.connect()
-    try:
-        assert mqtt_responder._connected.is_set(), "Responder client failed to connect"
-    finally:
-        await mqtt_responder.disconnect()
+async def test_connect(requester, responder):
+
+    assert requester._connected.is_set(), "Client failed to connect"
+    assert responder._connected.is_set(), "Responder client failed to connect"
+
 
 @pytest.mark.asyncio
-async def test_request_success(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        response = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
-        assert response is not None, "Expected a valid response, got None"
-        assert "header" in response
-        assert "response_code" in response["header"]
-        assert response["header"]["response_code"] == 205
-        assert int(response["timestamp"]) >= CURRENT_TIMESTAMP, "Timestamp should be current or later"
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+async def test_request_success(responder, requester):
+
+    response = await requester.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
+    assert response is not None, "Expected a valid response, got None"
+    assert "header" in response
+    assert "response_code" in response["header"]
+    assert response["header"]["response_code"] == 205
+    assert int(response["timestamp"]) >= CURRENT_TIMESTAMP, "Timestamp should be current or later"
+
 
 @pytest.mark.asyncio
-async def test_request_timeout(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        with pytest.raises(GatewayTimeoutResponse):
-            response = await mqtt_requester.request(
-                target_device_tag="nonexistent_device",
-                subsystem="nonexistent_subsystem",
-                path="nonexistent_path",
-                timeout=0.1
-            )
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+async def test_request_timeout(responder, requester):
+
+    with pytest.raises(GatewayTimeoutResponse):
+        response = await requester.request(
+            target_device_tag="nonexistent_device",
+            subsystem="nonexistent_subsystem",
+            path="nonexistent_path",
+            timeout=1
+        )
 
 @pytest.mark.asyncio
-async def test_concurrent_requests(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        async def send(index):
-            resp = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
-            assert resp is not None, f"Request {index} got no response"
-            assert "header" in resp and "response_code" in resp["header"]
-            print(f"[{index}] Response: {resp['header']['response_code']}")
+async def test_concurrent_requests(responder, requester):
 
-        await asyncio.gather(*[send(i) for i in range(5)])
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    async def send(index):
+        resp = await requester.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
+        assert resp is not None, f"Request {index} got no response"
+        assert "header" in resp and "response_code" in resp["header"]
+        print(f"[{index}] Response: {resp['header']['response_code']}")
+
+    await asyncio.gather(*[send(i) for i in range(5)])
+
 
 @pytest.mark.asyncio
-async def test_concurrent_requests_stress(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        async def send(index):
-            resp = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
-            assert resp is not None, f"Request {index} got no response"
-            assert "header" in resp and "response_code" in resp["header"]
-            print(f"[{index}] Response: {resp['header']['response_code']}")
+async def test_concurrent_requests_stress(responder, requester):
+    async def send(index):
+        resp = await requester.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
+        assert resp is not None, f"Request {index} got no response"
+        assert "header" in resp and "response_code" in resp["header"]
+        print(f"[{index}] Response: {resp['header']['response_code']}")
 
-        await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])  # Increase to stress more
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])  # Increase to stress more
 
 # Updated tests for message handler modularity
 @pytest.mark.asyncio
-async def test_multiple_handlers(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        # Add logging handler (propagates)
-        async def logging_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
-            print(f"Logging: {payload}")
-            return None
+async def test_multiple_handlers(responder, requester):
 
-        # Add response handler (stops propagation)
-        async def response_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
-            if "response_code" in payload.get("header", {}):
-                print(f"Response handled: {payload}")
-            return payload
+    # Add logging handler (propagates)
+    async def logging_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
+        print(f"Logging: {payload}")
+        return None
 
-        # Add handlers in a specific order
-        await mqtt_requester.add_message_handler(MessageHandlerBase(
-            can_handle=lambda p: True,
-            process=logging_handler,
-            propagate=True
-        ))
-        await mqtt_requester.add_message_handler(MessageHandlerBase(
-            can_handle=lambda p: "response_code" in p.get("header", {}),
-            process=response_handler,
-            propagate=False
-        ))
+    # Add response handler (stops propagation)
+    async def response_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
+        if "response_code" in payload.get("header", {}):
+            print(f"Response handled: {payload}")
+        return payload
 
-        response = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
-        assert response is not None
-        assert "header" in response and "response_code" in response["header"]
-        # Verify logging occurs before response handling (checked via print order due to addition order)
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    # Add handlers in a specific order
+    await requester.add_message_handler(MessageHandlerBase(
+        can_handle=lambda p: True,
+        process=logging_handler,
+        propagate=True
+    ))
+    await requester.add_message_handler(MessageHandlerBase(
+        can_handle=lambda p: "response_code" in p.get("header", {}),
+        process=response_handler,
+        propagate=False
+    ))
 
-@pytest.mark.asyncio
-async def test_default_handler(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        # Add a handler that doesn't match (e.g., for a different method)
-        async def invalid_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
-            return None
-
-        await mqtt_requester.add_message_handler(MessageHandlerBase(
-            can_handle=lambda p: "POST" in p.get("header", {}).get("method", ""),
-            process=invalid_handler,
-            propagate=True
-        ))
-
-        # Send a GET request, which should trigger the default handler
-        response = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
-        assert response is not None
-        assert "header" in response and "response_code" in response["header"]
-        # Verify default handler output (checked via print in default_handler)
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    response = await requester.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
+    assert response is not None
+    assert "header" in response and "response_code" in response["header"]
+    # Verify logging occurs before response handling (checked via print order due to addition order)
 
 
 @pytest.mark.asyncio
-async def test_invalid_handler_protocol(mqtt_requester):
-    await mqtt_requester.connect()
-    try:
-        # Define an invalid handler missing required methods
-        class InvalidHandler:
-            def handle(self, client):  # Missing topic and payload
-                pass
+async def test_default_handler(responder, requester):
 
-        with pytest.raises(ValueError):
-            await mqtt_requester.add_message_handler(InvalidHandler())
-    finally:
-        await mqtt_requester.disconnect()
+    # Add a handler that doesn't match (e.g., for a different method)
+    async def invalid_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return None
 
+    await requester.add_message_handler(MessageHandlerBase(
+        can_handle=lambda p: "POST" in p.get("header", {}).get("method", ""),
+        process=invalid_handler,
+        propagate=True
+    ))
 
-@pytest.mark.asyncio
-async def test_put_success(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        response = await mqtt_requester.request(target_device_tag=RESPONDER_TAG, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH, method=Method.PUT, value=0)
-        assert response is not None, "Expected a valid response, got None"
-        assert "header" in response
-        assert "response_code" in response["header"]
-        assert response["header"]["response_code"] == ResponseCode.CHANGED.value
-        assert int(response["timestamp"]) >= CURRENT_TIMESTAMP, "Timestamp should be current or later"
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
-
+    # Send a GET request, which should trigger the default handler
+    response = await requester.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH)
+    assert response is not None
+    assert "header" in response and "response_code" in response["header"]
+    # Verify default handler output (checked via print in default_handler)
 
 
 @pytest.mark.asyncio
-async def test_request_bad_request_exception(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        # Use a custom handler that raises exceptions
-        from gf_mqtt_client.message_handler import ResponseHandlerBase
+async def test_invalid_handler_protocol(requester):
 
-        async def exception_raising_handler(client, topic, payload):
-            return payload  # it will raise via handle_response_with_exception
+    # Define an invalid handler missing required methods
+    class InvalidHandler:
+        def handle(self, client):  # Missing topic and payload
+            pass
 
-        await mqtt_requester.add_message_handler(ResponseHandlerBase(
-            process=exception_raising_handler,
-            propagate=False,
-            raise_exceptions=True,
-        ))
-
-        # Manually inject a simulate_error flag to force NOT_FOUND
-        with pytest.raises(NotFoundResponse):
-            await mqtt_requester.request(
-                target_device_tag=RESPONDER_TAG,
-                subsystem=TOPIC_SUBSYSTEM,
-                path='bad_request',
-            )
-
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
-
-@pytest.mark.asyncio
-async def test_request_unauthorized_response(mqtt_responder, mqtt_requester):
-
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-
-    try:
-        async def exception_raising_handler(client, topic, payload):
-            return payload
-
-        await mqtt_requester.add_message_handler(ResponseHandlerBase(
-            process=exception_raising_handler,
-            propagate=False,
-            raise_exceptions=True,
-        ))
-
-        with pytest.raises(NotFoundResponse):
-            await mqtt_requester.request(
-                target_device_tag=RESPONDER_TAG,
-                subsystem=TOPIC_SUBSYSTEM,
-                path="unknown_path",
-            )
-
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    with pytest.raises(ValueError):
+        await requester.add_message_handler(InvalidHandler())
 
 
 @pytest.mark.asyncio
-async def test_put_then_get_effect(mqtt_responder, mqtt_requester):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        # change sample_rate
-        new_rate = 12345
-        put_resp = await mqtt_requester.request(
-            target_device_tag=RESPONDER_TAG,
+async def test_put_success(responder, requester):
+
+    response = await requester.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=TOPIC_PATH, method=Method.PUT, value=0)
+    assert response is not None, "Expected a valid response, got None"
+    assert "header" in response
+    assert "response_code" in response["header"]
+    assert response["header"]["response_code"] == ResponseCode.CHANGED.value
+    assert int(response["timestamp"]) >= CURRENT_TIMESTAMP, "Timestamp should be current or later"
+
+
+@pytest.mark.asyncio
+async def test_request_bad_request_exception(responder, requester):
+
+    # Use a custom handler that raises exceptions
+    from gf_mqtt_client.message_handler import ResponseHandlerBase
+
+    async def exception_raising_handler(client, topic, payload):
+        return payload  # it will raise via handle_response_with_exception
+
+    await requester.add_message_handler(ResponseHandlerBase(
+        process=exception_raising_handler,
+        propagate=False,
+        raise_exceptions=True,
+    ))
+
+    # Manually inject a simulate_error flag to force NOT_FOUND
+    with pytest.raises(NotFoundResponse):
+        await requester.request(
+            target_device_tag=responder.identifier,
             subsystem=TOPIC_SUBSYSTEM,
-            path="sample_rate",
-            method=Method.PUT,
-            value=new_rate
+            path='bad_request',
         )
-        # Assert PUT succeeded
-        assert put_resp["header"]["response_code"] == ResponseCode.CHANGED.value
 
-        # Immediately GET the same URI
-        get_resp = await mqtt_requester.request(
-            target_device_tag=RESPONDER_TAG,
+@pytest.mark.asyncio
+async def test_request_unauthorized_response(responder, requester):
+
+    async def exception_raising_handler(client, topic, payload):
+        return payload
+
+    await requester.add_message_handler(ResponseHandlerBase(
+        process=exception_raising_handler,
+        propagate=False,
+        raise_exceptions=True,
+    ))
+
+    with pytest.raises(NotFoundResponse):
+        await requester.request(
+            target_device_tag=responder.identifier,
             subsystem=TOPIC_SUBSYSTEM,
-            path="sample_rate",
-            method=Method.GET
+            path="unknown_path",
         )
-        assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
-        assert get_resp["body"] == new_rate
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_put_then_get_effect(responder, requester):
+
+    # change sample_rate
+    new_rate = 12345
+    put_resp = await requester.request(
+        target_device_tag=responder.identifier,
+        subsystem=TOPIC_SUBSYSTEM,
+        path="sample_rate",
+        method=Method.PUT,
+        value=new_rate
+    )
+    # Assert PUT succeeded
+    assert put_resp["header"]["response_code"] == ResponseCode.CHANGED.value
+
+    # Immediately GET the same URI
+    get_resp = await requester.request(
+        target_device_tag=responder.identifier,
+        subsystem=TOPIC_SUBSYSTEM,
+        path="sample_rate",
+        method=Method.GET
+    )
+    assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
+    assert get_resp["body"] == new_rate
 
 
 import copy
@@ -285,162 +222,134 @@ import copy
     ("gains", [9, 8, 7, 6, 5]),
     ("sample_rate", 25000),
 ])
-async def test_all_writable_uris_put_get(mqtt_responder, mqtt_requester, uri, new_value):
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        # Issue PUT
-        put_resp = await mqtt_requester.request(
-            target_device_tag=RESPONDER_TAG,
-            subsystem=TOPIC_SUBSYSTEM,
-            path=uri,
-            method=Method.PUT,
-            value=copy.deepcopy(new_value)
-        )
-        assert put_resp["header"]["response_code"] == ResponseCode.CHANGED.value
+async def test_all_writable_uris_put_get(responder, requester, uri, new_value):
 
-        # Then GET and verify
-        get_resp = await mqtt_requester.request(
-            target_device_tag=RESPONDER_TAG,
-            subsystem=TOPIC_SUBSYSTEM,
-            path=uri,
-            method=Method.GET
-        )
-        assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
-        assert get_resp["body"] == new_value
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    # Issue PUT
+    put_resp = await requester.request(
+        target_device_tag=responder.identifier,
+        subsystem=TOPIC_SUBSYSTEM,
+        path=uri,
+        method=Method.PUT,
+        value=copy.deepcopy(new_value)
+    )
+    assert put_resp["header"]["response_code"] == ResponseCode.CHANGED.value
+
+    # Then GET and verify
+    get_resp = await requester.request(
+        target_device_tag=responder.identifier,
+        subsystem=TOPIC_SUBSYSTEM,
+        path=uri,
+        method=Method.GET
+    )
+    assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
+    assert get_resp["body"] == new_value
 
 
 import random
 
 @pytest.mark.asyncio
-async def test_concurrent_puts_stress(mqtt_responder, mqtt_requester):
-    """Fire off 1 000 PUTs in parallel, only checking for CHANGED."""
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        async def send(i):
-            payload = i  # or: [i, i, i, i, i] for gains
-            put = await mqtt_requester.request(
-                target_device_tag=RESPONDER_TAG,
-                subsystem=TOPIC_SUBSYSTEM,
-                path="sample_rate",        # or "gains"
-                method=Method.PUT,
-                value=payload
-            )
-            assert put["header"]["response_code"] == ResponseCode.CHANGED.value
+async def test_concurrent_puts_stress(responder, requester):
+    """Fire off MAX_REQUESTS PUTs in parallel, only checking for CHANGED."""
+    async def send(i):
+        payload = i  # or: [i, i, i, i, i] for gains
+        put = await requester.request(
+            target_device_tag=responder.identifier,
+            subsystem=TOPIC_SUBSYSTEM,
+            path="sample_rate",        # or "gains"
+            method=Method.PUT,
+            value=payload
+        )
+        assert put["header"]["response_code"] == ResponseCode.CHANGED.value
 
-        await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
-
+    await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])
 
 
 @pytest.mark.asyncio
-async def test_concurrent_gets_stress(mqtt_responder, mqtt_requester):
-    """Fire off 1 000 GETs in parallel and assert each one succeeds."""
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        async def send(i):
-            resp = await mqtt_requester.request(
-                target_device_tag=RESPONDER_TAG,
-                subsystem=TOPIC_SUBSYSTEM,
-                path="gains",              # read-only
-                method=Method.GET
-            )
-            # we only assert the status code, not the body
-            assert resp["header"]["response_code"] == ResponseCode.CONTENT.value
+async def test_concurrent_gets_stress(responder, requester):
+    """Fire off MAX_REQUESTS GETs in parallel and assert each one succeeds."""
 
-        await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    async def send(i):
+        resp = await requester.request(
+            target_device_tag=responder.identifier,
+            subsystem=TOPIC_SUBSYSTEM,
+            path="gains",              # read-only
+            method=Method.GET
+        )
+        # we only assert the status code, not the body
+        assert resp["header"]["response_code"] == ResponseCode.CONTENT.value
+
+    await asyncio.gather(*[send(i) for i in range(MAX_REQUESTS)])
 
 
 # Timestamp used to verify freshness (optional)
 CURRENT_TS = int(time.time() * 1000)
 
 @pytest.mark.asyncio
-async def test_post_create_and_get_resource(mqtt_responder, mqtt_requester):
+async def test_post_create_and_get_resource(responder, requester):
     """
     POST to the 'resources' collection should return 201 Created with a location,
     and a subsequent GET to that location should return the original body.
     """
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        payload = {"foo": "bar", "baz": 123}
-        # Issue POST
-        post_resp = await mqtt_requester.request(
-            target_device_tag=RESPONDER_TAG,
-            subsystem="axuv",            # or use TOPIC_SUBSYSTEM if imported
-            path="resources",
-            method=Method.POST,
-            value=payload,
-            timeout=5
-        )
-        hdr = post_resp["header"]
-        # Assert 201 Created
-        assert hdr["response_code"] == ResponseCode.CREATED.value
-        # Location header must be present and non-empty
-        assert "location" in hdr and isinstance(hdr["location"], str) and hdr["location"]
-        new_uri = hdr["location"]
 
-        # Now GET that new resource
-        get_resp = await mqtt_requester.request(
-            target_device_tag=RESPONDER_TAG,
-            subsystem="axuv",
-            path=new_uri,
-            method=Method.GET
-        )
-        assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
-        # Body must match the original payload
-        assert get_resp["body"] == payload
-        # Fresh timestamp
-        assert int(get_resp["timestamp"]) >= CURRENT_TS
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    payload = {"foo": "bar", "baz": 123}
+    # Issue POST
+    post_resp = await requester.request(
+        target_device_tag=responder.identifier,
+        subsystem="axuv",            # or use TOPIC_SUBSYSTEM if imported
+        path="resources",
+        method=Method.POST,
+        value=payload,
+        timeout=5
+    )
+    hdr = post_resp["header"]
+    # Assert 201 Created
+    assert hdr["response_code"] == ResponseCode.CREATED.value
+    # Location header must be present and non-empty
+    assert "location" in hdr and isinstance(hdr["location"], str) and hdr["location"]
+    new_uri = hdr["location"]
+
+    # Now GET that new resource
+    get_resp = await requester.request(
+        target_device_tag=responder.identifier,
+        subsystem="axuv",
+        path=new_uri,
+        method=Method.GET
+    )
+    assert get_resp["header"]["response_code"] == ResponseCode.CONTENT.value
+    # Body must match the original payload
+    assert get_resp["body"] == payload
+    # Fresh timestamp
+    assert int(get_resp["timestamp"]) >= CURRENT_TS
 
 
 @pytest.mark.asyncio
-async def test_concurrent_post_create_resources_stress(mqtt_responder, mqtt_requester):
+async def test_concurrent_post_create_resources_stress(responder, requester):
     """
-    Fire off 500 concurrent POSTs to 'resources', each creating a unique URI,
+    Fire off MAX_REQUESTS concurrent POSTs to 'resources', each creating a unique URI,
     then immediately GET each one and verify its body.
     """
-    await mqtt_responder.connect()
-    await mqtt_requester.connect()
-    try:
-        async def worker(i):
-            body = f"stress_val_{i}"
-            # POST
-            post = await mqtt_requester.request(
-                target_device_tag=RESPONDER_TAG,
+    async def worker(i):
+        body = f"stress_val_{i}"
+        # POST
+        post = await requester.request(
+            target_device_tag=responder.identifier,
                 subsystem="axuv",
                 path="resources",
                 method=Method.POST,
                 value=body
             )
-            assert post["header"]["response_code"] == ResponseCode.CREATED.value
-            uri = post["header"]["location"]
+        assert post["header"]["response_code"] == ResponseCode.CREATED.value
+        uri = post["header"]["location"]
 
-            # GET
-            get = await mqtt_requester.request(
-                target_device_tag=RESPONDER_TAG,
-                subsystem="axuv",
-                path=uri,
-                method=Method.GET
-            )
-            assert get["header"]["response_code"] == ResponseCode.CONTENT.value
-            assert get["body"] == body
+        # GET
+        get = await requester.request(
+            target_device_tag=responder.identifier,
+            subsystem="axuv",
+            path=uri,
+            method=Method.GET
+        )
+        assert get["header"]["response_code"] == ResponseCode.CONTENT.value
+        assert get["body"] == body
 
-        # launch 500 workers in parallel
-        await asyncio.gather(*[worker(i) for i in range(MAX_REQUESTS)])
-    finally:
-        await mqtt_requester.disconnect()
-        await mqtt_responder.disconnect()
+    # launch MAX_REQUESTS workers in parallel
+    await asyncio.gather(*[worker(i) for i in range(MAX_REQUESTS)])

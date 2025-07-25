@@ -98,6 +98,9 @@ class MQTTClient:
         return str(uuid.uuid4())
 
     async def connect(self):
+        if self._connected.is_set():
+            logging.warning(f"Client {self.identifier} is already connected")
+            return
         logging.info(
             f"Connecting to broker {self.broker}:{self.port} with client {self.identifier}"
         )
@@ -133,6 +136,13 @@ class MQTTClient:
     def is_connected(self) -> bool:
         """Check if the client is connected."""
         return self._connected.is_set()
+    
+    def ensure_connected(self):
+        while not self.is_connected:
+            logging.warning(
+                f"Client {self.identifier} is not connected, waiting for connection..."
+            )
+            asyncio.sleep(0.1)
 
     async def disconnect(self):
         logging.info(f"Disconnecting MQTT client {self.identifier}")

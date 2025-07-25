@@ -77,12 +77,16 @@ class MockAXUVDevice:
         self.dynamic_resources: Dict[str, Any] = {}
 
     def update_uri(self, uri: str, value: Any) -> ResponseCode:
-        if uri in self.writable_uris:
+        if uri in self.writable_uris or uri in self.dynamic_resources:
             setattr(self, uri, value)
             logging.info(f"Updated {uri} to {value}")
             return ResponseCode.CHANGED
-        logging.warning(f"Attempted to update read-only URI: {uri}")
-        return ResponseCode.NOT_FOUND
+        elif uri in self.uris:
+            logging.warning(f"Attempted to update read-only URI: {uri}")
+            return ResponseCode.FORBIDDEN
+        else:
+            logging.warning(f"URI not found for update: {uri}")
+            return ResponseCode.NOT_FOUND
 
     def get_uri(self, uri: str):
         # dynamic resources first

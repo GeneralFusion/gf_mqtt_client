@@ -2,6 +2,7 @@
 
 import logging
 import os
+import uuid
 import pytest_asyncio
 import time
 from typing import Any, Dict
@@ -21,8 +22,8 @@ BROKER_CONFIG = MQTTBrokerConfig(
     port=int(os.getenv("MQTT_BROKER_PORT", 1883))
 )
 
-RESPONDER_TAG = "2D_XX_0_9999"
-REQUESTOR_TAG = "2D_XX_0_9998"
+# RESPONDER_TAG = "2D_XX_0_9999"
+# REQUESTOR_TAG = "2D_XX_0_9998"
 
 DEVICE_DEFAULTS = {
     "gains": [0, 1, 2, 3, 4],
@@ -31,6 +32,12 @@ DEVICE_DEFAULTS = {
     "ip": "10.10.10.10",
     "firmware_version": "0.0.1",
 }
+
+
+def generate_uuid() -> str:
+    # Generate a unique request ID using UUID
+    return str(uuid.uuid4())
+
 
 class MockMQTTDevice:
     def __init__(self):
@@ -164,36 +171,42 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
 
 
 @pytest_asyncio.fixture(scope="module")
-async def mqtt_responder():
+async def responder():
+    identifier = generate_uuid()
     client = MQTTClient(
         broker=BROKER_CONFIG.hostname,
         port=BROKER_CONFIG.port,
-        timeout=3,
-        identifier=RESPONDER_TAG
+        timeout=10,
+        identifier=identifier
     )
     client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
     await client.add_message_handler(
         RequestHandlerBase(process=request_handler, propagate=False)
     )
+    await client.connect()
     yield client
+    await client.disconnect()
 
 
 @pytest_asyncio.fixture(scope="module")
-async def mqtt_requester():
+async def requester():
+    identifier = generate_uuid()    
     client = MQTTClient(
         broker=BROKER_CONFIG.hostname,
         port=BROKER_CONFIG.port,
-        timeout=5,
-        identifier=REQUESTOR_TAG
+        timeout=10,
+        identifier=identifier
     )
     client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
 
     async def response_handler(client, topic: str, payload: dict) -> dict:
         if "response_code" in payload.get("header", {}):
             print(f"[Requester] Received response: {payload}")
-        return payload
+            return payload
 
     await client.add_message_handler(
         ResponseHandlerBase(process=response_handler, propagate=False)
     )
+    await client.connect()
     yield client
+    await client.disconnect()
