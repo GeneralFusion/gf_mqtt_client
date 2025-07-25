@@ -70,6 +70,16 @@ def parse_method(method: Any) -> Method:
         raise ValueError(f"Method must be an int or str, got {type(method)}")
     return method
 
+def generate_unique_id(prefix: str = "mqtt_client") -> str:
+    """
+    Generate a unique identifier for the MQTT client.
+    """
+    if prefix is None:
+        prefix = "mqtt_client"
+    if not isinstance(prefix, str):
+        raise ValueError("Prefix must be a string")
+    return f"{prefix}-{uuid.uuid4()}"
+
 class MQTTClient:
     def __init__(
         self,
@@ -80,13 +90,18 @@ class MQTTClient:
         subscriptions: Optional[list] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
+        ensure_unique_identifier: bool = False
     ):
         self.broker = broker
         self.port = port
         self.timeout = timeout
         self._username: Optional[str] = username
         self._password: Optional[str] = password
-        self.identifier = identifier if identifier else f"mqtt_client_{uuid.uuid4()}"
+        if ensure_unique_identifier:
+            identifier = generate_unique_id(identifier)
+        else:
+            identifier = identifier or generate_unique_id()
+        self.identifier = identifier
         self._client: Optional[Client] = None
         self._client_task: Optional[asyncio.Task] = None
         self._pending_requests: Dict[str, asyncio.Future] = {}
