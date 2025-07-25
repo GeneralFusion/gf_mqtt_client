@@ -137,12 +137,12 @@ class MQTTClient:
         """Check if the client is connected."""
         return self._connected.is_set()
     
-    def ensure_connected(self):
+    async def ensure_connected(self):
         while not self.is_connected:
             logging.warning(
                 f"Client {self.identifier} is not connected, waiting for connection..."
             )
-            asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
 
     async def disconnect(self):
         logging.info(f"Disconnecting MQTT client {self.identifier}")
@@ -240,7 +240,7 @@ class MQTTClient:
         return payload
 
     async def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
-        if not self._client:
+        if not self._connected.is_set():
             logging.error(f"Cannot publish: Client {self.identifier} is not connected")
             raise RuntimeError("Client is not connected")
 
@@ -251,12 +251,11 @@ class MQTTClient:
         )
 
     async def subscribe(self, topic: str):
-        if not self._client:
+        if not self._connected.is_set():
             logging.error(
                 f"Cannot subscribe: Client {self.identifier} is not connected"
             )
             raise RuntimeError("Client is not connected")
-
         await self._client.subscribe(topic)
         logging.info(f"Subscribed to topic {topic} with client {self.identifier}")
 

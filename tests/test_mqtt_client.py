@@ -14,7 +14,8 @@ from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
-MAX_REQUESTS = 100  # Maximum concurrent requests for stress tests
+MAX_REQUESTS = 500  # Maximum concurrent requests for stress tests
+DEFAULT_TIMEOUT = 2
 
 # Current date and time for testing
 CURRENT_TIMESTAMP = int(datetime(2025, 6, 24, 14, 51).timestamp() * 1000)  # 02:51 PM PDT, June 24, 2025
@@ -45,7 +46,7 @@ async def test_request_timeout(responder, requester):
             target_device_tag="nonexistent_device",
             subsystem="nonexistent_subsystem",
             path="nonexistent_path",
-            timeout=1
+            timeout=DEFAULT_TIMEOUT,
         )
 
 @pytest.mark.asyncio
@@ -295,11 +296,11 @@ async def test_post_create_and_get_resource(responder, requester):
     # Issue POST
     post_resp = await requester.request(
         target_device_tag=responder.identifier,
-        subsystem="axuv",            # or use TOPIC_SUBSYSTEM if imported
+        subsystem="axuv",  # or use TOPIC_SUBSYSTEM if imported
         path="resources",
         method=Method.POST,
         value=payload,
-        timeout=5
+        timeout=DEFAULT_TIMEOUT,
     )
     hdr = post_resp["header"]
     # Assert 201 Created

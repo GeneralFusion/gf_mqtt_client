@@ -123,23 +123,34 @@ class MockAXUVDevice:
             logging.warning(f"Action URI not found: {uri}")
             return ResponseCode.NOT_FOUND
 
-        if uri == "arm":
-            new_state = bool(value) if value is not None else True
-            state_str = "ARMED" if new_state else "IDLE"
-            self.update_state(state_str)
-            logging.info(f"Device {'armed' if new_state else 'disarmed'}.")
-            return ResponseCode.VALID
+        logging.info(f"Running action for URI: {uri}")
+        try:
+            if value is not None:
+                # If the action requires a value, call it with the value
+                return getattr(self, uri)(value)
+            else:
+                # If no value is needed, just call the action
+                return getattr(self, uri)()
+        except Exception as e:
+            logging.error(f"Error running action {uri}: {e}")
+            return ResponseCode.INTERNAL_ERROR
 
-        if uri == "trigger":
-            # update state
+    def arm(self, new_state: bool = True):
+        state = "ARMED" if new_state else "IDLE"
+        self.update_state(state)
+        logging.info(f"Device {'armed' if new_state else 'disarmed'}.")
+        return ResponseCode.VALID
+
+    def trigger(self):
+        if self.status["state"] == "ARMED":
+            logging.info("Triggering the device...")
             self.update_state("TRIGGERED")
 
             top_ts = int(time.time())
             metrics = []
             for ch in range(4):
                 props = MetricProperties(
-                    source_name=f"{self.device_name}_chan_{ch+1}",
-                    channel_id=ch
+                    source_name=f"{self.device_name}_chan_{ch+1}", channel_id=ch
                 )
                 data_hex = self._generate_hex_data()
                 metrics.append(
@@ -147,14 +158,17 @@ class MockAXUVDevice:
                         name=self.device_name,
                         timestamp=top_ts,
                         properties=props,
-                        data=data_hex
+                        data=data_hex,
                     )
                 )
 
             # create Pydantic payload
             self._last_payload = DataPayload(timestamp=top_ts, metrics=metrics)
             logging.info(f"Generated 4‑channel Pydantic payload @ {top_ts}")
-            return ResponseCode.VALID
+        else:
+            logging.warning("Device is not armed, cannot trigger.")
+            return ResponseCode.METHOD_NOT_ALLOWED
+        return ResponseCode.VALID
 
     def update_state(self, new_state: str):
         self.status = {"last_update": time.time(), "state": new_state}

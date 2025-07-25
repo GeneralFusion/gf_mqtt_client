@@ -22,9 +22,6 @@ BROKER_CONFIG = MQTTBrokerConfig(
     port=int(os.getenv("MQTT_BROKER_PORT", 1883))
 )
 
-# RESPONDER_TAG = "2D_XX_0_9999"
-# REQUESTOR_TAG = "2D_XX_0_9998"
-
 DEVICE_DEFAULTS = {
     "gains": [0, 1, 2, 3, 4],
     "sample_rate": 5000,
@@ -170,9 +167,9 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
     return response
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def responder():
-    identifier = generate_uuid()
+    identifier = "responder-" + generate_uuid()
     client = MQTTClient(
         broker=BROKER_CONFIG.hostname,
         port=BROKER_CONFIG.port,
@@ -188,9 +185,9 @@ async def responder():
     await client.disconnect()
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def requester():
-    identifier = generate_uuid()    
+    identifier = "requester-" + generate_uuid()
     client = MQTTClient(
         broker=BROKER_CONFIG.hostname,
         port=BROKER_CONFIG.port,

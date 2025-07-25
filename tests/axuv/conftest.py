@@ -9,7 +9,7 @@ from gf_mqtt_client.topic_manager import TopicManager
 from tests.conftest import BROKER_CONFIG
 
 
-REQUESTOR_TAG = "MOCK_AXUV_REQUESTOR"
+REQUESTOR_TAG = "MOCK_AXUV_CLIENT"
 RESPONDER_TAG = "MOCK_AXUV_DEVICE"
 SUBSYSTEM = "axuv"
 

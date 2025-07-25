@@ -144,3 +144,19 @@ def test_get_data_from_device(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_r
 
     except Exception as e:
         pytest.fail(f"Test failed due to unexpected error: {e}")
+
+
+def test_large_data_length(mock_axuv_device, sync_mqtt_requestor, sync_mqtt_responder):
+    """Test setting a large data length on the mock AXUV device."""
+    try:
+        response = adjust_data_length_via_request(sync_mqtt_requestor, sync_mqtt_responder, 32768)
+        assert response is not None
+        assert "body" in response
+        assert mock_axuv_device.data_length == 32768
+
+        data = capture_data_via_request(sync_mqtt_requestor, sync_mqtt_responder)
+        assert data is not None
+        assert all(len(data["metrics"][i]["data"]) == 4*32768 for i in range(4)), f"Expected 131072 metrics for all channels, got {[len(data['metrics'][i]['data']) for i in range(4)]}"
+
+    except Exception as e:
+        pytest.fail(f"Test failed due to unexpected error: {e}")
