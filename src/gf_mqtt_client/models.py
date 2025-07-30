@@ -1,13 +1,21 @@
 from enum import Enum
 from typing import Dict, Optional, Union, List
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 class MQTTBrokerConfig(BaseModel):
-    username: str = ""
-    password: str = ""
     hostname: str = "broker.emqx.io"
-    port: int = 1883
-    timeout: int = 5
+    port: Optional[int] = 1883
+    timeout: Optional[int] = 5
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+    @model_validator(mode="after")
+    def set_defaults_if_none(self) -> "MQTTBrokerConfig":
+        if self.port is None:
+            self.port = 1883
+        if self.timeout is None:
+            self.timeout = 5
+        return self
 
 class Method(Enum):
     GET = 1
@@ -83,7 +91,6 @@ class RequestBaseModel(BaseModel):
     path: str
     correlation_id: Optional[str] = None
     source: Optional[str] = None
-    target: Optional[str] = None
     token: Optional[str] = None
 
     @field_validator("request_id")

@@ -3,13 +3,13 @@ import threading
 from time import sleep, time
 from typing import Any, Dict, Optional, List
 from concurrent.futures import ThreadPoolExecutor
-import logging
 import atexit
 
 from gf_mqtt_client.exceptions import ResponseException
 from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient
 from gf_mqtt_client.message_handler import MessageHandlerProtocol
+
 
 class SyncMQTTClient:
     """
@@ -81,25 +81,15 @@ class SyncMQTTClient:
 
     def connect(self):
         """Connect to the MQTT broker (blocking)."""
-        try:
-            self._run_async(self._mqtt_client.connect())
-            self._connected = True
-            logging.info(f"Successfully connected MQTT client {self._mqtt_client.identifier}")
-            return self
-        except Exception as e:
-            logging.error(f"Failed to connect MQTT client: {e}")
-            raise
+        self._run_async(self._mqtt_client.connect())
+        self._connected = True
+        return self
     
     def disconnect(self):
         """Disconnect from the MQTT broker (blocking)."""
         if self._connected:
-            try:
-                self._run_async(self._mqtt_client.disconnect())
-                self._connected = False
-                logging.info(f"Successfully disconnected MQTT client {self._mqtt_client.identifier}")
-            except Exception as e:
-                logging.error(f"Error during disconnect: {e}")
-                raise
+            self._run_async(self._mqtt_client.disconnect())
+            self._connected = False
     
     def request(self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int = None) -> Optional[Dict[str, Any]]:
         """
@@ -121,10 +111,10 @@ class SyncMQTTClient:
                 self._mqtt_client.request(target_device_tag=target_device_tag, subsystem=subsystem, path=path, method=method, value=value, timeout=timeout)
             )
         except ResponseException as e:
-            logging.warning(f"Protocol error from device: {e}")
+            self._mqtt_client.logger.warning(f"Protocol error from device: {e}")
             raise
         except Exception as e:
-            logging.error(f"Transport or internal error: {e}")
+            self._mqtt_client.logger.error(f"Transport or internal error: {e}")
             raise e
     
     def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
@@ -132,38 +122,22 @@ class SyncMQTTClient:
         if not self._connected:
             raise RuntimeError("Client not connected. Call connect() first.")
         
-        try:
-            self._run_async(self._mqtt_client.publish(topic, payload, qos))
-        except Exception as e:
-            logging.error(f"Publish failed: {e}")
-            raise
+        self._run_async(self._mqtt_client.publish(topic, payload, qos))
     
     def subscribe(self, topic: str):
         """Subscribe to a topic (blocking)."""
         if not self._connected:
             raise RuntimeError("Client not connected. Call connect() first.")
-        
-        try:
-            self._run_async(self._mqtt_client.subscribe(topic))
-        except Exception as e:
-            logging.error(f"Subscribe failed: {e}")
-            raise
+    
+        self._run_async(self._mqtt_client.subscribe(topic))
     
     def add_message_handler(self, handler: MessageHandlerProtocol):
         """Add a message handler (blocking)."""
-        try:
-            self._run_async(self._mqtt_client.add_message_handler(handler))
-        except Exception as e:
-            logging.error(f"Failed to add message handler: {e}")
-            raise
+        self._run_async(self._mqtt_client.add_message_handler(handler))
     
     def remove_message_handler(self, handler: MessageHandlerProtocol):
         """Remove a message handler (blocking)."""
-        try:
-            self._run_async(self._mqtt_client.remove_message_handler(handler))
-        except Exception as e:
-            logging.error(f"Failed to remove message handler: {e}")
-            raise
+        self._run_async(self._mqtt_client.remove_message_handler(handler))
     
     def set_credentials(self, username: str, password: str):
         """Set MQTT credentials."""

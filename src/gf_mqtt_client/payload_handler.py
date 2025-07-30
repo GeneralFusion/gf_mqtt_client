@@ -17,14 +17,14 @@ class PayloadHandler:
                               body: Optional[Dict[str, Any]] = None,
                               token: Optional[str] = None,
                               correlation_id: Optional[str] = None,
-                              source: Optional[str] = None, target: Optional[str] = None) -> Dict[str, Any]:
-        header = HeaderRequest(method=method.value, path=path, request_id=request_id, token=token, correlation_id=correlation_id, source=source, target=target)
+                              source: Optional[str] = None) -> Dict[str, Any]:
+        header = HeaderRequest(method=method.value, path=path, request_id=request_id, token=token, correlation_id=correlation_id, source=source)
         payload = RequestPayload(header=header, body=body, timestamp=str(self._get_current_timestamp()))
         return payload.model_dump()
 
     def create_response_payload(self, response_code: ResponseCode, path: str, request_id: str,
-                               body: Dict[str, Any], correlation_id: Optional[str] = None, source: Optional[str] = None, target: Optional[str] = None) -> Dict[str, Any]:
-        header = HeaderResponse(response_code=response_code.value, path=path, request_id=request_id, correlation_id=correlation_id, source=source, target=target)
+                               body: Dict[str, Any], correlation_id: Optional[str] = None, source: Optional[str] = None) -> Dict[str, Any]:
+        header = HeaderResponse(response_code=response_code.value, path=path, request_id=request_id, correlation_id=correlation_id, source=source)
         payload = ResponsePayload(header=header, body=body, timestamp=str(self._get_current_timestamp()))
         return payload.model_dump()
 

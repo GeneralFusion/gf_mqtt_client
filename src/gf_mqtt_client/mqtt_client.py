@@ -18,6 +18,13 @@ from .exceptions import ResponseException, GatewayTimeoutResponse
 import warnings
 
 
+class ClientFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        if hasattr(record, 'extra') and isinstance(record.extra, dict):
+            extra_info = ' '.join(f"{k}={v}" for k, v in record.extra.items())
+            return f"{record.msg} {extra_info}"
+        return super().format(record)
+    
 class MessageLogger(logging.LoggerAdapter):
     """
     A custom logger that can be used to log messages with additional context.
@@ -131,7 +138,7 @@ class MQTTClient():
             merge_extra=True
         )
 
-        self.logger.info("Initialized MQTT client")
+        self.logger.info(f"Initialized MQTT client to broker {self.broker}:{self.port} with identifier '{self.identifier}'")
         ensure_compatible_event_loop_policy()
 
     def set_credentials(self, username: str, password: str):
@@ -161,7 +168,7 @@ class MQTTClient():
 
     async def connect(self):
         if self._connected.is_set():
-            self.logger.warning("Client already connected to broker")
+            self.logger.debug("Client already connected to broker")
             return
 
         self.logger.info(f"Connecting to broker {self.broker}:{self.port}")
@@ -175,11 +182,11 @@ class MQTTClient():
         )
         try:
             await self._client.__aenter__()
-            self.logger.info("Connected to broker")
+            self.logger.info(f"Connected to broker {self.broker}:{self.port}")
             self._client_task = asyncio.create_task(self._message_loop())
             self._connected.set()
         except MqttError as e:
-            self.logger.error(f"Failed to connect: {e}")
+            self.logger.error(f"Failed to connect to broker {self.broker}:{self.port}: {e}")
             raise GatewayTimeoutResponse(
                 response_code=ResponseCode.GATEWAY_TIMEOUT.value,
                 path="",
@@ -193,8 +200,7 @@ class MQTTClient():
         self.subscriptions.append(request_topic)
 
         for topic in self.subscriptions:
-            await self._client.subscribe(topic)
-            self.logger.info(f"Subscribed to topic {topic}")
+            await self.subscribe(topic)
 
         await self.add_message_handler(ResponseHandlerDefault())
 
@@ -203,7 +209,7 @@ class MQTTClient():
         return self._connected.is_set()
 
     async def disconnect(self):
-        self.logger.info("Disconnecting")
+        self.logger.debug(f"Disconnecting from broker {self.broker}:{self.port}")
         if self._client_task:
             self._client_task.cancel()
             try:
@@ -213,9 +219,9 @@ class MQTTClient():
 
         if self._client:
             await self._client.__aexit__(None, None, None)
-            self.logger.info("Disconnected from broker")
+            self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
 
-    def _extract_extras(self, payload: dict, max_len: int = 50, extra: Optional[dict] = None) -> dict:
+    def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: Optional[dict] = None) -> dict:
         """Extract extra information from the payload for logging."""
 
         def _determine_message_type(payload: dict) -> str:
@@ -255,7 +261,7 @@ class MQTTClient():
         # Remove keys with None values
         extra_new = {k: v for k, v in extra_new.items() if v is not None}
 
-        return {**extra_new, **(extra or {})}    
+        return {**extra_new, **(extra_extras or {})}    
 
     async def _message_loop(self):
         async for message in self._client.messages:
@@ -281,11 +287,6 @@ class MQTTClient():
                                     future = self._pending_requests.pop(request_id, None)
                                 if future and not future.done():
                                     future.set_result(payload)
-                                    response_code = payload.get("header", {}).get("response_code", None)
-                                    self.logger.debug(
-                                        f"Request '{request_id}' resolved with outcome {ResponseCode(response_code)}",
-                                        extra=self._extract_extras(payload, extra={"handler": handler.__class__.__name__})
-                                    )
                             processed = True
                         if not handler.propagate:
                             break
@@ -323,7 +324,7 @@ class MQTTClient():
     async def _default_handler(
         self, client: Self, topic: str, payload: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        self.logger.info(f"Default handler for topic {topic}")
+        self.logger.debug(f"Default handler for topic {topic}")
         return payload
 
 
@@ -367,7 +368,7 @@ class MQTTClient():
         request_id = self.generate_request_id()
 
         request_payload = payload_handler.create_request_payload(
-            method=method, path=path, request_id=request_id, body=value, source=self.identifier, target=target_device_tag
+            method=method, path=path, request_id=request_id, body=value, source=self.identifier
         )
 
         request_topic = self._topic_manager.build_request_topic(
@@ -387,22 +388,26 @@ class MQTTClient():
         await self.publish(request_topic, request_payload)
 
         self.logger.info(
-            f"'{Method(method)}' request sent to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
-            extra=self._extract_extras(request_payload, extra={"topic": request_topic})
+            f"'{Method(method)}' request sent to '{target_device_tag}' on uri-path '{path}'",
+            extra=self._extract_extras(request_payload, extra_extras={"topic": request_topic})
         )
 
         try:
+            loop = asyncio.get_running_loop()
+            request_init_time = loop.time()
             result = await asyncio.wait_for(future, timeout=timeout or self.timeout)
+            request_time = loop.time() - request_init_time
             response_code = ResponseCode(result.get("header", {}).get("response_code", None))
             self.logger.info(
-                f"'{Method(method)}' request successful with outcome '{response_code}' to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
-                extra=self._extract_extras(result, extra={"topic": response_topic})
+                f"'{Method(method)}' request successful with outcome '{response_code}' to '{target_device_tag}' on uri-path '{path}' taking {request_time * 1000:.0f}ms",
+                extra=self._extract_extras(result, extra_extras={"topic": response_topic})
             )
             return result
         except asyncio.TimeoutError:
+            timeout_elapsed = loop.time() - request_init_time
             self.logger.error(
-                f"'{Method(method)}' request to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}' timed out after {timeout or self.timeout} seconds",
-                extra=self._extract_extras(request_payload, extra={"topic": request_topic})
+                f"'{Method(method)}' request to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}' timed out after {timeout_elapsed:.3f} seconds",
+                extra=self._extract_extras(request_payload, extra_extras={"topic": request_topic})
             )
             raise GatewayTimeoutResponse(
                 response_code=ResponseCode.GATEWAY_TIMEOUT.value,
