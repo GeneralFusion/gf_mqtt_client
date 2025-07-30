@@ -32,3 +32,18 @@ class TopicManager:
         target_device_tag = parts[3]
         logging.debug(f"Extracted target device tag from request topic: {target_device_tag}")
         return target_device_tag
+    
+    def get_parts(self, topic: str | Topic) -> dict:
+        if isinstance(topic, Topic):
+            topic = topic.value
+        parts = topic.split('/')
+        if len(parts) < 4:
+            logging.warning(f"Invalid topic format: {topic}")
+            return {}
+        return {
+            "namespace": parts[0],
+            "subsystem": parts[1],
+            "type": parts[2],
+            "target": parts[3],
+            "request_id": parts[-1]
+        }

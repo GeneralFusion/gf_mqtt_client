@@ -16,6 +16,12 @@ class Method(Enum):
     DELETE = 4
 
 
+class MessageDirection(Enum):
+    OUTGOING = "request"
+    INCOMING = "response"
+    UNKNOWN = "unknown" or "N/A"
+
+
 class ResponseCode(Enum):
     CREATED = 201
     DELETED = 202
@@ -83,6 +89,7 @@ class HeaderRequest(RequestBaseModel):
     path: str
     token: Optional[str] = None
     correlation_id: Optional[str] = None
+    source: Optional[str] = None
 
     @field_validator("method")
     def validate_method(cls, v):
@@ -106,6 +113,7 @@ class HeaderResponse(RequestBaseModel):
     response_code: int
     path: str
     correlation_id: Optional[str] = None
+    source: Optional[str] = None
 
     @field_validator("response_code")
     def validate_response_code(cls, v):

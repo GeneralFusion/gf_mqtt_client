@@ -22,7 +22,7 @@ def test_sync_request_success(requestor, responder):
 
 def test_sync_request_exceptions(requestor, responder):
     with pytest.raises(NotFoundResponse):
-        requestor.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path="nonexisting_path", timeout=100)
+        requestor.request(target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path="nonexisting_path", timeout=2)
 
 
 def test_connect_sync(requestor, responder):

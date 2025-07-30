@@ -66,6 +66,7 @@ class MockMQTTDevice:
         self.collection_uris = ["resources"]
         self.dynamic_counter = 0
         self.dynamic_resources: Dict[str, Any] = {}
+        self.identifier = "mock_device"
 
     def update_uri(self, uri: str, value: Any) -> ResponseCode:
         if uri in self.writable_uris:
@@ -161,6 +162,7 @@ def create_response(request_payload: dict) -> dict:
         "path": path,
         "request_id": header["request_id"],
         "correlation_id": header.get("correlation_id"),
+        "source": MOCK_DEVICE.identifier
     }
     if location:
         resp_header["location"] = location
