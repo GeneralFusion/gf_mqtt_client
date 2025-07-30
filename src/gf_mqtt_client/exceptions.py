@@ -14,9 +14,9 @@ class ResponseException(Exception):
 
     def __init__(
         self,
+        detail: Optional[str] = None,
         *,
         path: Optional[str] = None,
-        detail: Optional[str] = None,
         source: Optional[str] = None,
         target: Optional[str] = None,
         response_code: Optional[int] = None,
@@ -36,8 +36,6 @@ class ResponseException(Exception):
         parts = [f"code={self.response_code}"]
         if path:
             parts.append(f"path={path!r}")
-        if detail:
-            parts.append(f"detail={detail!r}")
         if source:
             parts.append(f"source={source!r}")
         if target:
@@ -47,7 +45,7 @@ class ResponseException(Exception):
         if method:
             parts.append(f"method={method!r}")
 
-        super().__init__(f"{self.__class__.__name__}: " + ", ".join(parts))
+        super().__init__(f"{detail!r} {self.__class__.__name__}: " + ", ".join(parts))
 
     def __repr__(self):
         return (
