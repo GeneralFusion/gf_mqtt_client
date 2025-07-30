@@ -16,8 +16,8 @@ def test_create_general_payload():
 def test_create_request_payload():
     handler = PayloadHandler()
     payload = handler.create_request_payload(
-        Method.GET, "gains", "16fd2706-8baf-433b-82eb-8c7fada847da",
-        {"data": [0, 1, 2]}, "123456789==", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        method=Method.GET, path="gains", request_id="16fd2706-8baf-433b-82eb-8c7fada847da",
+        body={"data": [0, 1, 2]}, token="123456789==", correlation_id="a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
     )
     assert payload["header"]["method"] == Method.GET.value
     assert payload["header"]["path"] == "gains"
@@ -28,7 +28,7 @@ def test_create_request_payload():
     assert str(payload["timestamp"]).isdigit()
 
     # Test without optional fields
-    payload_min = handler.create_request_payload(Method.GET, "gains", "16fd2706-8baf-433b-82eb-8c7fada847da")
+    payload_min = handler.create_request_payload(method=Method.GET, path="gains", request_id="16fd2706-8baf-433b-82eb-8c7fada847da")
     assert payload_min["header"]["token"] is None
     assert payload_min["header"]["correlation_id"] is None
     assert payload_min["body"] is None
@@ -36,8 +36,8 @@ def test_create_request_payload():
 def test_create_response_payload():
     handler = PayloadHandler()
     payload = handler.create_response_payload(
-        ResponseCode.CONTENT, "gains", "16fd2706-8baf-433b-82eb-8c7fada847da",
-        {"data": [0, 1, 2]}, "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        response_code=ResponseCode.CONTENT, path="gains", request_id="16fd2706-8baf-433b-82eb-8c7fada847da",
+        body={"data": [0, 1, 2]}, correlation_id="a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
     )
     assert payload["header"]["response_code"] == ResponseCode.CONTENT.value
     assert payload["header"]["path"] == "gains"
@@ -47,7 +47,7 @@ def test_create_response_payload():
     assert str(payload["timestamp"]).isdigit()
 
     # Test without correlation_id
-    payload_min = handler.create_response_payload(ResponseCode.CONTENT, "gains", "16fd2706-8baf-433b-82eb-8c7fada847da", {"data": [0, 1, 2]})
+    payload_min = handler.create_response_payload(response_code=ResponseCode.CONTENT, path="gains", request_id="16fd2706-8baf-433b-82eb-8c7fada847da", body={"data": [0, 1, 2]})
     assert payload_min["header"]["correlation_id"] is None
 
 def test_validate_payload():

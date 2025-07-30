@@ -395,13 +395,13 @@ class MQTTClient():
             result = await asyncio.wait_for(future, timeout=timeout or self.timeout)
             response_code = ResponseCode(result.get("header", {}).get("response_code", None))
             self.logger.info(
-                f"{Method(method)} request successful with outcome {response_code} to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
+                f"'{Method(method)}' request successful with outcome '{response_code}' to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
                 extra=self._extract_extras(result, extra={"topic": response_topic})
             )
             return result
         except asyncio.TimeoutError:
             self.logger.error(
-                f"{Method(method)} request to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}' timed out after {timeout or self.timeout} seconds",
+                f"'{Method(method)}' request to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}' timed out after {timeout or self.timeout} seconds",
                 extra=self._extract_extras(request_payload, extra={"topic": request_topic})
             )
             raise GatewayTimeoutResponse(

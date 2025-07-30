@@ -84,6 +84,7 @@ class RequestBaseModel(BaseModel):
     correlation_id: Optional[str] = None
     source: Optional[str] = None
     target: Optional[str] = None
+    token: Optional[str] = None
 
     @field_validator("request_id")
     def validate_request_id(cls, v):
