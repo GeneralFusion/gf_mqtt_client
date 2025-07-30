@@ -387,7 +387,7 @@ class MQTTClient():
         await self.publish(request_topic, request_payload)
 
         self.logger.info(
-            f"{Method(method)} request sent to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
+            f"'{Method(method)}' request sent to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
             extra=self._extract_extras(request_payload, extra={"topic": request_topic})
         )
 
