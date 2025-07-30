@@ -27,6 +27,8 @@ def handle_response_with_exception(client: MQTTClient, topic: str, payload: Dict
     topic_manager = TopicManager()
 
     header = payload.get("header", {})
+    method = header.get("method")
+    request_id = header.get("request_id")
     path = header.get("path")
     response_code_value = header.get("response_code")
     detail = payload.get("body") or header.get("location") or header.get("error_message")
@@ -40,7 +42,7 @@ def handle_response_with_exception(client: MQTTClient, topic: str, payload: Dict
 
         exception_class = RESPONSE_CODE_EXCEPTION_MAP.get(response_code)
         if exception_class:
-            raise exception_class(response_code=response_code.value, path=path, detail=str(detail), source=client.identifier, target=target_tag)
+            raise exception_class(response_code=response_code.value, path=path, detail=str(detail), source=client.identifier, target=target_tag, request_id=request_id, method=method)
 
 
 # === Handler Protocol ===

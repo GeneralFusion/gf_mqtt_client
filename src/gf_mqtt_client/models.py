@@ -15,11 +15,16 @@ class Method(Enum):
     PUT = 3
     DELETE = 4
 
+    def __str__(self):
+        return self.name
 
-class MessageDirection(Enum):
-    OUTGOING = "request"
-    INCOMING = "response"
-    UNKNOWN = "unknown" or "N/A"
+
+class MessageType(Enum):
+    REQUEST = "request"
+    RESPONSE = "response"
+    SYSTEM = "system"
+    EVENT = "event"
+    UNKNOWN = None
 
 
 class ResponseCode(Enum):
@@ -44,6 +49,9 @@ class ResponseCode(Enum):
     SERVICE_UNAVAILABLE = 503
     GATEWAY_TIMEOUT = 504
     PROXYING_NOT_SUPPORTED = 505
+
+    def __str__(self):
+        return f"{self.name}:{self.value}"
 
 
 class PayloadBaseModel(BaseModel):
@@ -72,6 +80,10 @@ class PayloadBaseModel(BaseModel):
 # Pydantic Models
 class RequestBaseModel(BaseModel):
     request_id: str
+    path: str
+    correlation_id: Optional[str] = None
+    source: Optional[str] = None
+    target: Optional[str] = None
 
     @field_validator("request_id")
     def validate_request_id(cls, v):
@@ -86,10 +98,6 @@ class RequestBaseModel(BaseModel):
 
 class HeaderRequest(RequestBaseModel):
     method: Union[int, str]
-    path: str
-    token: Optional[str] = None
-    correlation_id: Optional[str] = None
-    source: Optional[str] = None
 
     @field_validator("method")
     def validate_method(cls, v):
@@ -111,9 +119,6 @@ class HeaderRequest(RequestBaseModel):
 
 class HeaderResponse(RequestBaseModel):
     response_code: int
-    path: str
-    correlation_id: Optional[str] = None
-    source: Optional[str] = None
 
     @field_validator("response_code")
     def validate_response_code(cls, v):

@@ -3,10 +3,10 @@ from enum import Enum
 import json
 import sys
 import uuid
-from typing import Optional, Dict, Any, Callable, Awaitable, List
+from typing import Optional, Dict, Any, Callable, Awaitable, List, Self
 import logging
 from aiomqtt import Client, MqttError, Topic
-from .models import ResponseCode, Method
+from .models import ResponseCode, Method, MessageType
 from .payload_handler import PayloadHandler
 from .topic_manager import TopicManager
 from .message_handler import (
@@ -16,59 +16,38 @@ from .message_handler import (
 )
 from .exceptions import ResponseException, GatewayTimeoutResponse
 import warnings
-from .mqtt_logger_mixin import MQTTLoggerMixin, MessageDirection
 
-# class ContextLogger(logging.LoggerAdapter):
 
-#     def __init__(self, logger: logging.Logger, extra: Optional[Dict[str, Any]] = None):
-#         super().__init__(logger, extra or {})
-#         self._excluded_log_extras = ["namespace"]
-#         self.extra = {k: v for k, v in self.extra.items() if k not in self._excluded_log_extras}
+class MessageLogger(logging.LoggerAdapter):
+    """
+    A custom logger that can be used to log messages with additional context.
+    """
 
-#     def process(self, msg, kwargs):
-#         extra = kwargs.get("extra", {})
-#         if not isinstance(extra, dict):
-#             extra = {}
-#         # Merge extra context with the adapter's extra
-#         if self.extra:
-#             extra = {**self.extra, **extra}
-#         # Remove excluded keys from extra context
-#         for key in self._excluded_log_extras:
-#             extra.pop(key, None)
+    def __init__(self, logger: logging.Logger, extra: Optional[Dict[str, Any]] = None, merge_extra: bool = False, exclude_extras: Optional[List[str]] = None):
+        super().__init__(logger, extra or {})
+        self.logger = logger
+        self.extra = extra
+        self.merge_extra = merge_extra
+        self.exclude_extras = exclude_extras or []
 
-#         direction = extra.get("direction", MessageDirection.UNKNOWN.value)
-#         source = extra.get("source")
-#         target = extra.get("target")
-#         request_id = extra.get("request_id")
-#         subsystem = extra.get("subsystem")
-#         client_id = extra.get("client_id")
+    def process(self, msg, kwargs):
+        if self.merge_extra and "extra" in kwargs:
+            kwargs["extra"] = {**self.extra, **kwargs["extra"]}
+        else:
+            kwargs["extra"] = self.extra
+        if self.exclude_extras:
+            for key in self.exclude_extras:
+                kwargs["extra"].pop(key, None)
+        return msg, kwargs
 
-#         parts = []
-#         if client_id:
-#             parts.append(f"[{client_id}")
-#         else:
-#             parts.append("[")
+    def log_message(self, message: str, level: int = logging.INFO, **kwargs):
+        self.log(level, message, extra=kwargs)
 
-#         if direction == "request":
-#             parts.append("/ REQ →]")
-#         elif direction == "response":
-#             parts.append("/ RESP ←]")
-#         else:
-#             parts.append("]")
+    def log_request(self, message: str, level: int = logging.DEBUG, **kwargs):
+        self.log_message(message, level=level, direction=MessageDirection.REQUEST, **kwargs)
 
-#         if source:
-#             route = f"{source} →"
-#             route += f" {target}"
-#             parts.append(route)
-
-#         if subsystem:
-#             parts.append(f"subsystem={subsystem}")
-#         if request_id:
-#             parts.append(f"req_id={request_id}")
-
-#         tag = " | ".join(parts) + " - " if parts else ""
-#         return f"{tag}{msg}", kwargs
-
+    def log_response(self, message: str, level: int = logging.DEBUG, **kwargs):
+        self.log_message(message, level=level, direction=MessageDirection.RESPONSE, **kwargs)
 
 def ensure_compatible_event_loop_policy():
     if sys.platform.startswith("win"):
@@ -123,7 +102,7 @@ def generate_unique_id(prefix: str = "mqtt_client") -> str:
     return f"{prefix}-{uuid.uuid4()}"
 
 
-class MQTTClient(MQTTLoggerMixin):
+class MQTTClient():
     def __init__(
         self,
         broker: str,
@@ -136,7 +115,6 @@ class MQTTClient(MQTTLoggerMixin):
         ensure_unique_identifier: bool = False,
         logger: Optional[logging.LoggerAdapter] = None,
     ):
-        super().__init__(logger_name=__name__, base_logger=logger)
         self.broker = broker
         self.port = port
         self.timeout = timeout
@@ -156,42 +134,46 @@ class MQTTClient(MQTTLoggerMixin):
         self._topic_manager = TopicManager()
         self.subscriptions = subscriptions or []
 
-        logging.info("Initialized MQTT client")
+        self.logger = logger or MessageLogger(
+            logging.getLogger(__name__),
+            extra={"client_id": self.identifier},
+            merge_extra=True
+        )
+
+        self.logger.info("Initialized MQTT client")
         ensure_compatible_event_loop_policy()
-        self._excluded_log_extras = ["namespace"]
 
     def set_credentials(self, username: str, password: str):
         self._username = username
         self._password = password
-        logging.info("Credentials set for username")
+        self.logger.info(f"Credentials set for username - {username}:{password[:3]}{'*' * (len(password) - 3)}")
 
     async def add_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
             if not isinstance(handler, MessageHandlerProtocol):
                 raise ValueError("Handler must implement MessageHandlerProtocol")
             self._message_handlers.append(handler)
-            logging.info(f"Added message handler {handler.__class__.__name__}")
+            self.logger.debug(f"Added message handler {handler.__class__.__name__}")
 
     async def remove_message_handler(self, handler: MessageHandlerBase):
         async with self._lock:
             if handler in self._message_handlers:
                 self._message_handlers.remove(handler)
-                logging.info(
+                self.logger.debug(
                     f"Removed message handler {handler.__class__.__name__}"
                 )
             else:
-                logging.warning(f"Handler {handler.__class__.__name__} not found")
+                self.logger.warning(f"Handler {handler.__class__.__name__} not found")
 
     def generate_request_id(self) -> str:
-        logging.debug("Generating request ID")
         return str(uuid.uuid4())
 
     async def connect(self):
         if self._connected.is_set():
-            logging.warning("Already connected")
+            self.logger.warning("Client already connected to broker")
             return
 
-        logging.info(f"Connecting to broker {self.broker}:{self.port}")
+        self.logger.info(f"Connecting to broker {self.broker}:{self.port}")
 
         self._client = Client(
             hostname=self.broker,
@@ -202,11 +184,11 @@ class MQTTClient(MQTTLoggerMixin):
         )
         try:
             await self._client.__aenter__()
-            logging.info("Connected to broker")
+            self.logger.info("Connected to broker")
             self._client_task = asyncio.create_task(self._message_loop())
             self._connected.set()
         except MqttError as e:
-            logging.error(f"Failed to connect: {e}")
+            self.logger.error(f"Failed to connect: {e}")
             raise GatewayTimeoutResponse(
                 response_code=ResponseCode.GATEWAY_TIMEOUT.value,
                 path="",
@@ -221,7 +203,7 @@ class MQTTClient(MQTTLoggerMixin):
 
         for topic in self.subscriptions:
             await self._client.subscribe(topic)
-            logging.info(f"Subscribed to topic {topic}")
+            self.logger.info(f"Subscribed to topic {topic}")
 
         await self.add_message_handler(ResponseHandlerDefault())
 
@@ -230,40 +212,59 @@ class MQTTClient(MQTTLoggerMixin):
         return self._connected.is_set()
 
     async def disconnect(self):
-        logging.info("Disconnecting")
+        self.logger.info("Disconnecting")
         if self._client_task:
             self._client_task.cancel()
             try:
                 await self._client_task
             except asyncio.CancelledError:
-                logging.debug("Cancelled message loop")
+                self.logger.debug("Cancelled message loop")
 
         if self._client:
             await self._client.__aexit__(None, None, None)
-            logging.info("Disconnected from broker")
+            self.logger.info("Disconnected from broker")
 
-    # async def _process_log(self, message: str, level: int = logging.INFO, topic: str | Topic = None, extra: Optional[Dict[str, Any]] = None):
-    #     """Process log messages with optional topic and extra context."""
-    #     if extra is None:
-    #         extra = {}
+    def _extract_extras(self, payload: dict, max_len: int = 50, extra: Optional[dict] = None) -> dict:
+        """Extract extra information from the payload for logging."""
 
-    #     if topic:
-    #         topic_parts = self._topic_manager.get_parts(topic)
-    #         for key, value in topic_parts.items():
-    #             if key == "type":
-    #                 extra["direction"] = value
-    #             elif key not in self._excluded_log_extras:
-    #                 extra[key] = value
+        def _determine_message_type(payload: dict) -> str:
+            if "header" in payload and "method" in payload["header"]:
+                return MessageType.REQUEST.value
+            if "header" in payload and "response_code" in payload["header"]:
+                return MessageType.RESPONSE.value
 
-    #     direction = MessageDirection(extra.get("direction", "N/A"))
-    #     if direction == MessageDirection.OUTGOING:
-    #         extra["source"] = extra.get("source", self.identifier)
-    #         extra["target"] = extra.get("target", "?")
-    #     elif direction == MessageDirection.INCOMING:
-    #         extra["source"] = extra.get("source", "?")
-    #         extra["target"] = self.identifier
+            return MessageType.UNKNOWN.value
 
-    #     logging.log(level, message, extra=extra)
+        assert max_len > 0, "max_len must be greater than 0"
+
+        header = payload.get("header", {})
+        source = header.get("source", "unknown")
+        target = header.get("target", "unknown")
+        request_id = header.get("request_id", "N/A")
+        correlation_id = header.get("correlation_id", None)
+        path = header.get("path", None)
+        response_code = header.get("response_code", None)
+        message_type = _determine_message_type(payload)
+
+        extra_new = {}
+        extra_new["source"] = source
+        extra_new["target"] = target
+        extra_new["request_id"] = request_id
+        extra_new["correlation_id"] = correlation_id
+        extra_new["path"] = path
+        extra_new["message_type"] = message_type
+        extra_new["response_code"] = response_code
+
+        # Post-processing of extra fields
+        for k, v in extra_new.items():
+
+            # Truncate string values to max_len and append "..." if truncated
+            self._truncate_str(v, output_length=max_len) if isinstance(v, str) and len(v) > max_len else v
+
+        # Remove keys with None values
+        extra_new = {k: v for k, v in extra_new.items() if v is not None}
+
+        return {**extra_new, **(extra or {})}    
 
     async def _message_loop(self):
         async for message in self._client.messages:
@@ -272,85 +273,80 @@ class MQTTClient(MQTTLoggerMixin):
             try:
                 payload = json.loads(payload_str)
                 header = payload.get("header", {})
-                source = header.get("source", "unknown")
                 request_id = header.get("request_id", "N/A")
-                self.log_message(
-                    f"Received message: {self._truncate_str(payload_str)}",
-                    direction=MessageDirection.RESPONSE,
-                    level=logging.INFO,
+                self.logger.debug(
+                    f"Received message: {self._truncate_str(payload_str, output_length=100)}",
+                    extra=self._extract_extras(payload)
                 )
                 processed = False
                 for handler in self._message_handlers:
                     if not handler.can_handle(self, topic, payload):
                         continue
-                    response = await handler.handle(self, topic, payload)
-                    if response is not None:
-                        if "request_id" in payload.get("header", {}):
-                            async with self._lock:
-                                future = self._pending_requests.pop(request_id, None)
-                            if future and not future.done():
-                                future.set_result(payload)
-                                self.log_message(
-                                    f"Resolved request {request_id} with handler {handler.__class__.__name__}",
-                                    direction=MessageDirection.RESPONSE,
-                                    level=logging.DEBUG,
-                                )
-                        processed = True
-                    if not handler.propagate:
-                        break
+                    try:
+                        response = await handler.handle(self, topic, payload)
+                        if response is not None:
+                            if "request_id" in payload.get("header", {}):
+                                async with self._lock:
+                                    future = self._pending_requests.pop(request_id, None)
+                                if future and not future.done():
+                                    future.set_result(payload)
+                                    response_code = payload.get("header", {}).get("response_code", None)
+                                    self.logger.debug(
+                                        f"Request '{request_id}' resolved with outcome {ResponseCode(response_code)}",
+                                        extra=self._extract_extras(payload, extra={"handler": handler.__class__.__name__})
+                                    )
+                            processed = True
+                        if not handler.propagate:
+                            break
+                    except ResponseException as e:
+                        self.logger.error(
+                            f"{ResponseCode(e.response_code)} during {e.method} request to '{e.target}' on path '{e.path}': {e.detail}",
+                        )
+                        async with self._lock:
+                            future = self._pending_requests.pop(
+                                payload.get("header", {}).get("request_id"), None
+                            )
+                        if future and not future.done():
+                            future.set_exception(e)
                 if not processed:
                     default_handler = MessageHandlerBase(
                         can_handle=lambda c, m, p: True,
                         process=self._default_handler,
-                        priority=100,
                         propagate=True,
                     )
                     await default_handler.handle(self, topic, payload)
 
             except json.JSONDecodeError:
-                logging.warning(
-                    f"Failed to decode JSON payload from topic {topic}: {payload_str}"
+                self.logger.warning(
+                    f"Failed to decode JSON payload from topic {topic}: {payload_str}",
+                    extra=self._extract_extras(payload)
                 )
-            except ResponseException as e:
-                logging.exception(
-                    f"ResponseException while processing message: {e}"
-                )
-                async with self._lock:
-                    future = self._pending_requests.pop(
-                        payload.get("header", {}).get("request_id"), None
-                    )
-                if future and not future.done():
-                    future.set_exception(e)
+
             except Exception as e:
-                logging.error(
+                self.logger.error(
                     f"Error processing message: {e}",
                     exc_info=True
                 )
                 raise e
 
     async def _default_handler(
-        self, topic: str, payload: Dict[str, Any]
+        self, client: Self, topic: str, payload: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        logging.info(f"Default handler for topic {topic}")
+        self.logger.info(f"Default handler for topic {topic}")
         return payload
 
-    async def _default_handler(
-        self, topic: str, payload: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        logging.info(f"Default handler for topic {topic}")
-        return payload
 
     async def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
         await self._client.publish(topic, json.dumps(payload), qos=qos)
-        logging.debug(f"Published to topic {topic}")
+        self.logger.debug(f"Published to topic {topic}")
 
     async def subscribe(self, topic: str):
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
         await self._client.subscribe(topic)
-        logging.info(f"Subscribed to topic {topic}")
+        self.logger.debug(f"Subscribed to topic {topic}")
 
     def _truncate_str(self, input_string: str, output_length: int = 50) -> str:
         if not isinstance(input_string, str):
@@ -380,7 +376,7 @@ class MQTTClient(MQTTLoggerMixin):
         request_id = self.generate_request_id()
 
         request_payload = payload_handler.create_request_payload(
-            method=method, path=path, request_id=request_id, body=value, source=self.identifier
+            method=method, path=path, request_id=request_id, body=value, source=self.identifier, target=target_device_tag
         )
 
         request_topic = self._topic_manager.build_request_topic(
@@ -398,22 +394,24 @@ class MQTTClient(MQTTLoggerMixin):
 
         await self.subscribe(response_topic)
         await self.publish(request_topic, request_payload)
-        self.log_request(
-            f"Published request {request_id} to {request_topic}",
-            level=logging.DEBUG,
+
+        self.logger.info(
+            f"{Method(method)} request sent to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
+            extra=self._extract_extras(request_payload, extra={"topic": request_topic})
         )
 
         try:
             result = await asyncio.wait_for(future, timeout=timeout or self.timeout)
-            self.log_response(
-                f"Received response for request {request_id} from {response_topic}",
-                level=logging.DEBUG,
+            response_code = ResponseCode(result.get("header", {}).get("response_code", None))
+            self.logger.info(
+                f"{Method(method)} request successful with outcome {response_code} to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}'",
+                extra=self._extract_extras(result, extra={"topic": response_topic})
             )
             return result
         except asyncio.TimeoutError:
-            self.log_response(
-                f"Request timed out",
-                level=logging.WARNING,
+            self.logger.error(
+                f"{Method(method)} request to '{target_device_tag}' on uri-path '{path}' with request_id '{request_id}' timed out after {timeout or self.timeout} seconds",
+                extra=self._extract_extras(request_payload, extra={"topic": request_topic})
             )
             raise GatewayTimeoutResponse(
                 response_code=ResponseCode.GATEWAY_TIMEOUT.value,
@@ -424,9 +422,6 @@ class MQTTClient(MQTTLoggerMixin):
             )
         finally:
             await self._client.unsubscribe(response_topic)
-            logging.debug(
-                f"Unsubscribed from response topic {response_topic}",
-            )
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
 

@@ -20,6 +20,9 @@ class ResponseException(Exception):
         source: Optional[str] = None,
         target: Optional[str] = None,
         response_code: Optional[int] = None,
+        request_id: Optional[str] = None,
+        method: Optional[str] = None
+
     ):
         # pick the explicit response_code or fall back to subclass default
         self.response_code = response_code if response_code is not None else self.default_code
@@ -27,6 +30,8 @@ class ResponseException(Exception):
         self.detail = detail
         self.source = source
         self.target = target
+        self.request_id = request_id
+        self.method = method
 
         parts = [f"code={self.response_code}"]
         if path:
@@ -37,6 +42,10 @@ class ResponseException(Exception):
             parts.append(f"source={source!r}")
         if target:
             parts.append(f"target={target!r}")
+        if request_id:
+            parts.append(f"request_id={request_id!r}")
+        if method:
+            parts.append(f"method={method!r}")
 
         super().__init__(f"{self.__class__.__name__}: " + ", ".join(parts))
 
@@ -47,7 +56,9 @@ class ResponseException(Exception):
             f"path={self.path!r}, "
             f"detail={self.detail!r}, "
             f"source={self.source!r}, "
-            f"target={self.target!r}"
+            f"target={self.target!r}, "
+            f"request_id={self.request_id!r}, "
+            f"method={self.method!r}"
             f")"
         )
 
