@@ -16,6 +16,7 @@ from gf_mqtt_client.topic_manager import TopicManager
 from dotenv import load_dotenv
 load_dotenv()
 
+
 # Hook into pytest configuration to set the event loop policy
 # this is necessary for compatibility with asyncio and aiomqtt with Windows and modern Python versions.
 def pytest_configure(config):

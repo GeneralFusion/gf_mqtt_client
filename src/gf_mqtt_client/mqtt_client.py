@@ -40,15 +40,6 @@ class MessageLogger(logging.LoggerAdapter):
                 kwargs["extra"].pop(key, None)
         return msg, kwargs
 
-    def log_message(self, message: str, level: int = logging.INFO, **kwargs):
-        self.log(level, message, extra=kwargs)
-
-    def log_request(self, message: str, level: int = logging.DEBUG, **kwargs):
-        self.log_message(message, level=level, direction=MessageDirection.REQUEST, **kwargs)
-
-    def log_response(self, message: str, level: int = logging.DEBUG, **kwargs):
-        self.log_message(message, level=level, direction=MessageDirection.RESPONSE, **kwargs)
-
 def ensure_compatible_event_loop_policy():
     if sys.platform.startswith("win"):
         current_policy = asyncio.get_event_loop_policy()
@@ -300,7 +291,7 @@ class MQTTClient():
                             break
                     except ResponseException as e:
                         self.logger.error(
-                            f"{ResponseCode(e.response_code)} during {e.method} request to '{e.target}' on path '{e.path}': {e.detail}",
+                            f"'{ResponseCode(e.response_code)}' during request to '{e.target}' on path '{e.path}': {e.detail}",
                         )
                         async with self._lock:
                             future = self._pending_requests.pop(
