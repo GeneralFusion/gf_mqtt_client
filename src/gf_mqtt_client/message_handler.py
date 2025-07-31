@@ -1,6 +1,3 @@
-
-
-
 from typing import Any, Awaitable, Callable, Dict, Optional, runtime_checkable, Protocol
 import logging
 from .models import ResponseCode
@@ -9,6 +6,8 @@ from .topic_manager import TopicManager
 
 # from src.mqtt_client import MQTTClient
 MQTTClient = Any  # Placeholder for the actual MQTTClient type, replace with the correct import
+
+logger = logging.getLogger(__name__)
 
 # === Exceptions ===
 
@@ -143,16 +142,24 @@ class RequestHandlerBase(MessageHandlerBase):
 class ResponseHandlerDefault(ResponseHandlerBase):
     def __init__(self):
         async def process_default_response(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-            logging.debug(f"Response received: {self._truncate_payload(payload)}", extra={"topic": topic})
+            logger.debug(
+                f"Response received: {self._truncate_payload(payload)}",
+                extra={"topic": topic},
+            )
             return payload
 
-        super().__init__(process=process_default_response, propagate=True, raise_exceptions=True)
+        super().__init__(
+            process=process_default_response, propagate=True, raise_exceptions=True
+        )
 
 
 class RequestHandlerDefault(RequestHandlerBase):
     def __init__(self):
         async def process_default_request(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-            logging.debug(f"Request received: {self._truncate_payload(payload)}", extra={"topic": topic})
+            logger.debug(
+                f"Request received: {self._truncate_payload(payload)}",
+                extra={"topic": topic},
+            )
             return payload
 
         super().__init__(process=process_default_request, propagate=True)

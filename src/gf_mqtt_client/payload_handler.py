@@ -2,7 +2,9 @@ from enum import Enum
 from typing import Dict, Any, Optional
 from pydantic import ValidationError
 from .models import GeneralPayload, RequestPayload, ResponsePayload, HeaderRequest, HeaderResponse, Method, ResponseCode
+import logging
 
+logger = logging.getLogger(__name__)
 
 class PayloadHandler:
     def __init__(self):
@@ -37,10 +39,10 @@ class PayloadHandler:
             else:
                 return GeneralPayload(**payload).model_dump()
         except ValidationError as e:
-            print(f"Validation error: {e.json()}")
+            logger.error(f"Validation error: {e.json()}")
             raise
         except Exception as e:
-            print(f"Unexpected error: {str(e)}")
+            logger.error(f"Unexpected error: {str(e)}")
             raise
 
     def parse_payload(self, payload: str) -> Dict[str, Any]:
