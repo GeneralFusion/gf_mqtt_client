@@ -446,27 +446,24 @@ if __name__ == "__main__":
             return None
 
         client = MQTTClient("localhost")
-        client.add_message_handler(
+        await client.add_message_handler(
             MessageHandlerBase(
                 can_handle=lambda p: "method" in p.get("header", {}),
                 process=request_handler,
-                priority=1,
                 propagate=False,
             )
         )
-        client.add_message_handler(
+        await client.add_message_handler(
             MessageHandlerBase(
                 can_handle=lambda p: True,
                 process=logging_handler,
-                priority=2,
                 propagate=True,
             )
         )
-        client.add_message_handler(
+        await client.add_message_handler(
             MessageHandlerBase(
                 can_handle=lambda p: "response_code" in p.get("header", {}),
                 process=response_handler,
-                priority=3,
                 propagate=False,
             )
         )
