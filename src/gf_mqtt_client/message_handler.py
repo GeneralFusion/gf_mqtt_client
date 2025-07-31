@@ -3,12 +3,14 @@ import logging
 from .models import ResponseCode
 from .exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, InternalServerErrorResponse, MethodNotAllowedResponse, ResponseException, GatewayTimeoutResponse
 from .topic_manager import TopicManager
-
 # from src.mqtt_client import MQTTClient
 MQTTClient = Any  # Placeholder for the actual MQTTClient type, replace with the correct import
 
 logger = logging.getLogger(__name__)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3f214e2e4b296ba49c1d6d2ff0050c8649552fc5
 # === Exceptions ===
 
 
@@ -142,10 +144,14 @@ class RequestHandlerBase(MessageHandlerBase):
 class ResponseHandlerDefault(ResponseHandlerBase):
     def __init__(self):
         async def process_default_response(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+<<<<<<< HEAD
             logger.debug(
                 f"Response received: {self._truncate_payload(payload)}",
                 extra={"topic": topic},
             )
+=======
+            logger.debug(f"Response received: {self._truncate_payload(payload)}", extra={"topic": topic, "client_id": client.identifier})
+>>>>>>> 3f214e2e4b296ba49c1d6d2ff0050c8649552fc5
             return payload
 
         super().__init__(
@@ -156,10 +162,14 @@ class ResponseHandlerDefault(ResponseHandlerBase):
 class RequestHandlerDefault(RequestHandlerBase):
     def __init__(self):
         async def process_default_request(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+<<<<<<< HEAD
             logger.debug(
                 f"Request received: {self._truncate_payload(payload)}",
                 extra={"topic": topic},
             )
+=======
+            logger.debug(f"Request received: {self._truncate_payload(payload)}", extra={"topic": topic, "client_id": client.identifier})
+>>>>>>> 3f214e2e4b296ba49c1d6d2ff0050c8649552fc5
             return payload
 
         super().__init__(process=process_default_request, propagate=True)

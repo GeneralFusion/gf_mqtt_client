@@ -3,6 +3,7 @@
 import logging
 import os
 import uuid
+from pydantic_core import ValidationError
 import pytest
 import pytest_asyncio
 import time
@@ -16,6 +17,11 @@ from gf_mqtt_client.topic_manager import TopicManager
 from dotenv import load_dotenv
 load_dotenv()
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)-8s %(message)s"
+)
 
 # Hook into pytest configuration to set the event loop policy
 # this is necessary for compatibility with asyncio and aiomqtt with Windows and modern Python versions.
@@ -28,13 +34,16 @@ def pytest_unconfigure(config):
     """Reset the event loop policy after tests."""
     reset_event_loop_policy()
 
-
-BROKER_CONFIG = MQTTBrokerConfig(
-    username=os.getenv("MQTT_BROKER_USERNAME"),
-    password=os.getenv("MQTT_BROKER_PASSWORD"),
-    hostname=os.getenv("MQTT_BROKER_HOSTNAME"),
-    port=int(os.getenv("MQTT_BROKER_PORT", 1883))
-)
+try:
+    BROKER_CONFIG = MQTTBrokerConfig(
+        username=os.getenv("MQTT_BROKER_USERNAME"),
+        password=os.getenv("MQTT_BROKER_PASSWORD"),
+        hostname=os.getenv("MQTT_BROKER_HOSTNAME"),
+        port=int(os.getenv("MQTT_BROKER_PORT", 1883))
+    )
+except ValidationError as e:
+    logging.error(f"Invalid MQTT Broker configuration. Please check your environment variables are defined correctly: {e.json()}")
+    raise
 
 DEVICE_DEFAULTS = {
     "gains": [0, 1, 2, 3, 4],
