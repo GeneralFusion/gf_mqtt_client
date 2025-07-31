@@ -7,10 +7,6 @@ from .topic_manager import TopicManager
 MQTTClient = Any  # Placeholder for the actual MQTTClient type, replace with the correct import
 
 logger = logging.getLogger(__name__)
-<<<<<<< HEAD
-
-=======
->>>>>>> 3f214e2e4b296ba49c1d6d2ff0050c8649552fc5
 # === Exceptions ===
 
 
