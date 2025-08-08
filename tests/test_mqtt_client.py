@@ -9,7 +9,7 @@ from gf_mqtt_client.message_handler import ResponseHandlerBase
 from gf_mqtt_client.models import Method
 from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
 from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
-
+from gf_mqtt_client.exceptions import *
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
@@ -353,3 +353,38 @@ async def test_concurrent_post_create_resources_stress(responder, requester):
 
     # launch MAX_REQUESTS workers in parallel
     await asyncio.gather(*[worker(i) for i in range(MAX_REQUESTS)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,expected_exception",
+    [
+        ("bad_option", BadOptionResponse),
+        ("forbidden", ForbiddenResponse),
+        ("not_acceptable", NotAcceptableResponse),
+        ("precondition_failed", PreconditionFailedResponse),
+        ("request_entity_too_large", RequestEntityTooLargeResponse),
+        ("unsupported_content_format", UnsupportedContentFormatResponse),
+        ("not_implemented", NotImplementedResponse),
+        ("bad_gateway", BadGatewayResponse),
+        ("service_unavailable", ServiceUnavailableResponse),
+        ("proxying_not_supported", ProxyingNotSupportedResponse),
+    ],
+)
+async def test_coap_error_responses(responder, requester, path, expected_exception):
+
+    async def handler(client, topic, payload):
+        return payload
+
+    await requester.add_message_handler(
+        ResponseHandlerBase(
+            process=handler,
+            propagate=False,
+            raise_exceptions=True,
+        )
+    )
+
+    with pytest.raises(expected_exception):
+        await requester.request(
+            target_device_tag=responder.identifier, subsystem=TOPIC_SUBSYSTEM, path=path
+        )

@@ -62,30 +62,117 @@ class ResponseException(Exception):
 
 
 class BadRequestResponse(ResponseException):
-    """400 Bad Request"""
+    """Request is malformed or contains invalid parameters (400)."""
+
     default_code = 400
 
 
 class UnauthorizedResponse(ResponseException):
-    """401 Unauthorized"""
+    """Authentication is required or failed (401)."""
+
     default_code = 401
 
 
+class BadOptionResponse(ResponseException):
+    """Request contains an unrecognized, malformed, or invalid option (402)."""
+
+    default_code = 402
+
+
+class ForbiddenResponse(ResponseException):
+    """Request is understood but explicitly refused by the server (403)."""
+
+    default_code = 403
+
+
 class NotFoundResponse(ResponseException):
-    """404 Not Found"""
+    """Requested resource or path was not found (404)."""
+
     default_code = 404
 
 
 class MethodNotAllowedResponse(ResponseException):
-    """405 Method Not Allowed"""
+    """Request method is not supported for the target resource (405)."""
+
     default_code = 405
 
 
+class NotAcceptableResponse(ResponseException):
+    """Requested content format or parameters are not acceptable (406)."""
+
+    default_code = 406
+
+
+class PreconditionFailedResponse(ResponseException):
+    """Client preconditions were not met, e.g. ETag mismatch (412)."""
+
+    default_code = 412
+
+
+class RequestEntityTooLargeResponse(ResponseException):
+    """Request payload is too large for the server to process (413)."""
+
+    default_code = 413
+
+
+class UnsupportedContentFormatResponse(ResponseException):
+    """Request payload format is not supported by the server (415)."""
+
+    default_code = 415
+
+
 class InternalServerErrorResponse(ResponseException):
-    """500 Internal Server Error"""
+    """Generic server error while processing the request (500)."""
+
     default_code = 500
 
 
+class NotImplementedResponse(ResponseException):
+    """Server does not support the requested method or feature (501)."""
+
+    default_code = 501
+
+
+class BadGatewayResponse(ResponseException):
+    """Invalid response received from upstream or intermediary (502)."""
+
+    default_code = 502
+
+
+class ServiceUnavailableResponse(ResponseException):
+    """Server is temporarily unavailable, busy, or down (503)."""
+
+    default_code = 503
+
+
 class GatewayTimeoutResponse(ResponseException):
-    """504 Gateway Timeout"""
+    """Request timed out while awaiting response from upstream (504)."""
+
     default_code = 504
+
+
+class ProxyingNotSupportedResponse(ResponseException):
+    """Server does not support proxying requests (505)."""
+
+    default_code = 505
+
+
+__all__ = [
+    "ResponseException",
+    "BadRequestResponse",
+    "UnauthorizedResponse",
+    "BadOptionResponse",
+    "ForbiddenResponse",
+    "NotFoundResponse",
+    "MethodNotAllowedResponse",
+    "NotAcceptableResponse",
+    "PreconditionFailedResponse",
+    "RequestEntityTooLargeResponse",
+    "UnsupportedContentFormatResponse",
+    "InternalServerErrorResponse",
+    "NotImplementedResponse",
+    "BadGatewayResponse",
+    "ServiceUnavailableResponse",
+    "GatewayTimeoutResponse",
+    "ProxyingNotSupportedResponse",
+]

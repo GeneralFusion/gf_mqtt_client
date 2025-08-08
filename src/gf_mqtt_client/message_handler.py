@@ -1,7 +1,7 @@
 from typing import Any, Awaitable, Callable, Dict, Optional, runtime_checkable, Protocol
 import logging
 from .models import ResponseCode
-from .exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, InternalServerErrorResponse, MethodNotAllowedResponse, ResponseException, GatewayTimeoutResponse
+from .exceptions import *
 from .topic_manager import TopicManager
 # from src.mqtt_client import MQTTClient
 MQTTClient = Any  # Placeholder for the actual MQTTClient type, replace with the correct import
@@ -14,9 +14,20 @@ logger = logging.getLogger(__name__)
 RESPONSE_CODE_EXCEPTION_MAP = {
     ResponseCode.BAD_REQUEST: BadRequestResponse,
     ResponseCode.UNAUTHORIZED: UnauthorizedResponse,
+    ResponseCode.BAD_OPTION: BadOptionResponse,
+    ResponseCode.FORBIDDEN: ForbiddenResponse,
     ResponseCode.NOT_FOUND: NotFoundResponse,
     ResponseCode.METHOD_NOT_ALLOWED: MethodNotAllowedResponse,
+    ResponseCode.NOT_ACCEPTABLE: NotAcceptableResponse,
+    ResponseCode.PRECONDITION_FAILED: PreconditionFailedResponse,
+    ResponseCode.REQUEST_ENTITY_TOO_LARGE: RequestEntityTooLargeResponse,
+    ResponseCode.UNSUPPORTED_CONTENT_FORMAT: UnsupportedContentFormatResponse,
     ResponseCode.INTERNAL_SERVER_ERROR: InternalServerErrorResponse,
+    ResponseCode.NOT_IMPLEMENTED: NotImplementedResponse,
+    ResponseCode.BAD_GATEWAY: BadGatewayResponse,
+    ResponseCode.SERVICE_UNAVAILABLE: ServiceUnavailableResponse,
+    ResponseCode.GATEWAY_TIMEOUT: GatewayTimeoutResponse,
+    ResponseCode.PROXYING_NOT_SUPPORTED: ProxyingNotSupportedResponse,
 }
 
 

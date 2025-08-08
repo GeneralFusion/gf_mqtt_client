@@ -1,17 +1,12 @@
-from pydantic import BaseModel
-from typing import List, Dict, Any
-import math
-import time
-import logging
-from src.gf_mqtt_client import ResponseCode
+# mock_device.py
 
-DEVICE_DEFAULTS = {
-    "gains": [0, 1, 2, 3, 4],
-    "sample_rate": 5000,
-    "status": {"last_update": time.time(), "state": "IDLE"},
-    "ip": "10.10.10.10",
-    "firmware_version": "0.0.1",
-}
+import time
+import math
+import logging
+from typing import Any, Dict, List
+
+from pydantic import BaseModel
+from gf_mqtt_client.models import ResponseCode, Method
 
 
 class MetricProperties(BaseModel):
@@ -42,142 +37,157 @@ class DataPayload(BaseModel):
 
 
 class MockAXUVDevice:
+    identifier = "mock_axuv"
+
     def __init__(self):
-        # static resources
-        self.gains = DEVICE_DEFAULTS["gains"]
-        self.sample_rate = DEVICE_DEFAULTS["sample_rate"]
-        self.status = DEVICE_DEFAULTS["status"]
-        self.ip = DEVICE_DEFAULTS["ip"]
-        self.firmware_version = DEVICE_DEFAULTS["firmware_version"]
+        self.gains = [0, 1, 2, 3, 4]
+        self.sample_rate = 5000
+        self.data_length = 100
+        self.status = {"last_update": time.time(), "state": "IDLE"}
+        self.ip = "10.10.10.10"
+        self.firmware_version = "0.0.1"
+        self.device_name = "AXUVTE99"
 
-        # how many samples per channel
-        self.data_length = DEVICE_DEFAULTS.get("data_length", 100)
-        # device identifier used in the JSON
-        self.device_name = DEVICE_DEFAULTS.get("device_name", "AXUVTE99")
+        self._last_payload = DataPayload(timestamp=0, metrics=[])
+        self.dynamic_resources: Dict[str, Any] = {}
+        self.dynamic_counter = 0
 
-        # buffer to hold last-triggered payload
-        self._last_payload: DataPayload = DataPayload(timestamp=0, metrics=[])
-
-        # URIs
-        self.uris = [
+        self._writable = {"gains", "sample_rate", "data_length"}
+        self._readable = {
             "gains",
             "sample_rate",
+            "data_length",
             "status",
             "ip",
             "firmware_version",
             "data",
-            "data_length",
-        ]
-        self.writable_uris = ["gains", "sample_rate", "data_length"]
-        self.action_uris = ["arm", "trigger"]
+        }
+        self._actions = {"arm", "trigger"}
+        self._collections = {"resources"}
 
-        # dynamic‐POST resources
-        self.collection_uris = ["resources"]
-        self.dynamic_counter = 0
-        self.dynamic_resources: Dict[str, Any] = {}
+    def handle_request(self, request: dict) -> dict:
+        header = request["header"]
+        path = header["path"]
+        method = header["method"]
+        request_id = header["request_id"]
+        body = request.get("body")
+        correlation_id = header.get("correlation_id")
 
-    def update_uri(self, uri: str, value: Any) -> ResponseCode:
-        if uri in self.writable_uris or uri in self.dynamic_resources:
-            setattr(self, uri, value)
-            logging.info(f"Updated {uri} to {value}")
-            return ResponseCode.CHANGED
-        elif uri in self.uris:
-            logging.warning(f"Attempted to update read-only URI: {uri}")
-            return ResponseCode.FORBIDDEN
+        if method == Method.GET.value:
+            code, response_body = self._handle_get(path)
+        elif method == Method.PUT.value:
+            code = self._handle_put(path, body)
+            response_body = None
+        elif method == Method.POST.value:
+            code, response_body = self._handle_post(path, body)
         else:
-            logging.warning(f"URI not found for update: {uri}")
-            return ResponseCode.NOT_FOUND
+            code, response_body = ResponseCode.NOT_IMPLEMENTED, None
 
-    def get_uri(self, uri: str):
-        # dynamic resources first
-        if uri in self.dynamic_resources:
-            return ResponseCode.CONTENT, self.dynamic_resources[uri]
+        return self._build_response(
+            path=path,
+            request_id=request_id,
+            correlation_id=correlation_id,
+            response_code=code,
+            body=response_body,
+            location=response_body if code == ResponseCode.CREATED else None,
+        )
 
-        # return the latest Pydantic payload as dict
-        if uri == "data":
-            return ResponseCode.CONTENT, self._last_payload.dict()
+    def _handle_get(self, path: str):
+        if path == "data":
+            return ResponseCode.CONTENT, self._last_payload.model_dump()
 
-        if uri in self.uris:
-            return ResponseCode.CONTENT, getattr(self, uri)
+        if path in self.dynamic_resources:
+            return ResponseCode.CONTENT, self.dynamic_resources[path]
 
-        logging.warning(f"URI not found: {uri}")
+        if path in self._readable:
+            return ResponseCode.CONTENT, getattr(self, path)
+
         return ResponseCode.NOT_FOUND, None
 
-    def _generate_hex_data(self) -> str:
-        """
-        Build a sine wave of length `self.data_length`,
-        scale to 0–0xFFFF, convert each to 4‑hex digits,
-        concatenate (no delimiters).
-        """
-        max_val = 0xFFFF
-        N = self.data_length
-        out = []
-        for i in range(N):
-            angle = 2 * math.pi * i / N
-            val = int((math.sin(angle) + 1) * (max_val / 2))
-            out.append(f"{val:04X}")
-        return "".join(out)
+    def _handle_put(self, path: str, value: Any) -> ResponseCode:
+        if path in self._writable or path in self.dynamic_resources:
+            setattr(self, path, value)
+            logging.info(f"Updated {path} → {value}")
+            return ResponseCode.CHANGED
+        elif path in self._readable:
+            return ResponseCode.FORBIDDEN
+        return ResponseCode.NOT_FOUND
 
-    def run_uri(self, uri: str, value: Any = None) -> ResponseCode:
-        if uri not in self.action_uris:
-            logging.warning(f"Action URI not found: {uri}")
-            return ResponseCode.NOT_FOUND
+    def _handle_post(self, path: str, value: Any):
+        if path in self._actions:
+            return self._run_action(path), None
+        if path in self._collections:
+            return self._create_resource(path, value)
+        return ResponseCode.NOT_FOUND, None
 
-        logging.info(f"Running action for URI: {uri}")
-        try:
-            if value is not None:
-                # If the action requires a value, call it with the value
-                return getattr(self, uri)(value)
-            else:
-                # If no value is needed, just call the action
-                return getattr(self, uri)()
-        except Exception as e:
-            logging.error(f"Error running action {uri}: {e}")
-            return ResponseCode.INTERNAL_ERROR
+    def _run_action(self, name: str) -> ResponseCode:
+        method = getattr(self, name, None)
+        if callable(method):
+            return method()
+        return ResponseCode.NOT_FOUND
 
-    def arm(self, new_state: bool = True):
-        state = "ARMED" if new_state else "IDLE"
-        self.update_state(state)
-        logging.info(f"Device {'armed' if new_state else 'disarmed'}.")
+    def _create_resource(self, collection: str, value: Any) -> (ResponseCode, str):
+        new_path = f"{collection}/{self.dynamic_counter}"
+        self.dynamic_counter += 1
+        self.dynamic_resources[new_path] = value
+        return ResponseCode.CREATED, new_path
+
+    def _build_response(
+        self,
+        path: str,
+        request_id: str,
+        correlation_id: str,
+        response_code: ResponseCode,
+        body: Any = None,
+        location: str = None,
+    ) -> dict:
+        header = {
+            "response_code": response_code.value,
+            "path": path,
+            "request_id": request_id,
+            "correlation_id": correlation_id,
+        }
+        if location:
+            header["location"] = location
+        return {
+            "header": header,
+            "body": body,
+            "timestamp": str(int(time.time() * 1000)),
+        }
+
+    def arm(self):
+        self.status = {"last_update": time.time(), "state": "ARMED"}
+        logging.info("Device armed.")
         return ResponseCode.VALID
 
     def trigger(self):
-        if self.status["state"] == "ARMED":
-            logging.info("Triggering the device...")
-            self.update_state("TRIGGERED")
-
-            top_ts = int(time.time())
-            metrics = []
-            for ch in range(4):
-                props = MetricProperties(
-                    source_name=f"{self.device_name}_chan_{ch+1}", channel_id=ch
-                )
-                data_hex = self._generate_hex_data()
-                metrics.append(
-                    Metric(
-                        name=self.device_name,
-                        timestamp=top_ts,
-                        properties=props,
-                        data=data_hex,
-                    )
-                )
-
-            # create Pydantic payload
-            self._last_payload = DataPayload(timestamp=top_ts, metrics=metrics)
-            logging.info(f"Generated 4‑channel Pydantic payload @ {top_ts}")
-        else:
-            logging.warning("Device is not armed, cannot trigger.")
+        if self.status["state"] != "ARMED":
+            logging.warning("Device not armed. Trigger rejected.")
             return ResponseCode.METHOD_NOT_ALLOWED
+        
+        self.status = {"last_update": time.time(), "state": "TRIGGERED"}
+
+        top_ts = int(time.time())
+        metrics = []
+        for ch in range(4):
+            props = MetricProperties(
+                source_name=f"{self.device_name}_chan_{ch + 1}", channel_id=ch
+            )
+            data = self._generate_hex_data()
+            metrics.append(
+                Metric(
+                    name=self.device_name, timestamp=top_ts, properties=props, data=data
+                )
+            )
+
+        self._last_payload = DataPayload(timestamp=top_ts, metrics=metrics)
+        logging.info(f"Generated payload with 4 channels @ {top_ts}")
         return ResponseCode.VALID
 
-    def update_state(self, new_state: str):
-        self.status = {"last_update": time.time(), "state": new_state}
-        logging.info(f"Device state updated to: {new_state}")
-        return self.status
-
-    def create_uri(self, collection: str, value: Any) -> (ResponseCode, str):
-        new_id = f"{collection}/{self.dynamic_counter}"
-        self.dynamic_counter += 1
-        self.dynamic_resources[new_id] = value
-        logging.info(f"Created new resource {new_id} = {value}")
-        return ResponseCode.CREATED, new_id
+    def _generate_hex_data(self) -> str:
+        max_val = 0xFFFF
+        N = self.data_length
+        return "".join(
+            f"{int((math.sin(2 * math.pi * i / N) + 1) * (max_val / 2)):04X}"
+            for i in range(N)
+        )
