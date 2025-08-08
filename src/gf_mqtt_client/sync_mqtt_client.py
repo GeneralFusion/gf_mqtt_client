@@ -112,7 +112,7 @@ class SyncMQTTClient:
             )
         except ResponseException as e:
             self._mqtt_client.logger.warning(f"Protocol error from device: {e}")
-            raise
+            raise e
         except Exception as e:
             self._mqtt_client.logger.error(f"Transport or internal error: {e}")
             raise e

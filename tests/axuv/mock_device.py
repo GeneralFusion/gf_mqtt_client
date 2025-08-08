@@ -48,7 +48,7 @@ class MockAXUVDevice:
         self.firmware_version = "0.0.1"
         self.device_name = "AXUVTE99"
 
-        self._last_payload = DataPayload(timestamp=0, metrics=[])
+        self._last_payload = None
         self.dynamic_resources: Dict[str, Any] = {}
         self.dynamic_counter = 0
 
@@ -94,7 +94,11 @@ class MockAXUVDevice:
 
     def _handle_get(self, path: str):
         if path == "data":
-            return ResponseCode.CONTENT, self._last_payload.model_dump()
+            if self._last_payload is None:
+                return ResponseCode.NOT_FOUND, None
+            data = self._last_payload.model_dump()
+            self._last_payload = None  # Reset after retrieval
+            return ResponseCode.CONTENT, data
 
         if path in self.dynamic_resources:
             return ResponseCode.CONTENT, self.dynamic_resources[path]
@@ -164,7 +168,7 @@ class MockAXUVDevice:
         if self.status["state"] != "ARMED":
             logging.warning("Device not armed. Trigger rejected.")
             return ResponseCode.METHOD_NOT_ALLOWED
-        
+
         self.status = {"last_update": time.time(), "state": "TRIGGERED"}
 
         top_ts = int(time.time())
