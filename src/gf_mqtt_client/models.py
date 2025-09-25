@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Dict, Optional, Union, List
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -17,11 +17,17 @@ class MQTTBrokerConfig(BaseModel):
             self.timeout = 5
         return self
 
-class Method(Enum):
-    GET = 1
-    POST = 2
-    PUT = 3
-    DELETE = 4
+# class Method(StrEnum):
+#     GET = "get"
+#     POST = "post"
+#     PUT = "put"
+#     DELETE = "delete"
+
+class Method(StrEnum):
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+    DELETE = "DELETE"
 
     def __str__(self):
         return self.name
@@ -117,7 +123,7 @@ class HeaderRequest(RequestBaseModel):
                 assert v in {m.value for m in Method}
                 return Method(v).value
             if isinstance(v, str):
-                assert v in {m.name for m in Method}
+                assert v in {m.name.upper() for m in Method}
                 return Method[v.upper()].value
         except AssertionError:
             raise ValueError(
