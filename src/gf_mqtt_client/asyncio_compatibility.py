@@ -64,7 +64,7 @@ def configure_asyncio_compatibility():
     Configure asyncio event loop policy based on Python version, platform, and environment variables.
     Set ASYNCIO_COMPATIBILITY_MODE=True to use WindowsSelectorEventLoopPolicy on Windows (Python >= 3.8)
     for compatibility with libraries like paho-mqtt. Set SUPPRESS_ASYNCIO_WARNINGS=True to silence warnings.
-    Logs configuration status. Call early in your application.
+    Logs configuration status. Call early in your application before any asyncio operations.
     See https://docs.python.org/3/library/asyncio-policy.html for details on event loop policies.
     """
     compatibility_mode = (
@@ -83,13 +83,22 @@ def configure_asyncio_compatibility():
 
     if compatibility_mode:
         try:
-            # Check if an event loop is already created to avoid RuntimeError
-            if asyncio.get_event_loop_policy().get_event_loop() is not None:
+            # Check for a running loop to avoid RuntimeError
+            try:
+                loop = asyncio.get_running_loop()
                 logging.warning(
-                    "Cannot set event loop policy: an event loop is already active. "
-                    "Ensure configure_asyncio_compatibility() is called early in the application."
+                    "Cannot set event loop policy: an event loop is already running. "
+                    "Ensure configure_asyncio_compatibility() is called before any asyncio operations."
                 )
+                logger.debug(f"Active loop: {loop}")
                 return
+            except RuntimeError:  # No running loop
+                pass
+
+            # Log current loop state for debugging
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            logger.debug(f"Current event loop: {loop}, running={loop.is_running()}")
+
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             logging.info(
                 "Set event loop policy to WindowsSelectorEventLoopPolicy for compatibility "
@@ -107,6 +116,7 @@ def configure_asyncio_compatibility():
                 f"Failed to set event loop policy: {e}. See https://docs.python.org/3/library/asyncio-policy.html "
                 "for guidance on event loop configuration."
             )
+            logger.debug(f"Current event loop: {loop}, running={loop.is_running()}")
     else:
         logging.info(
             "ASYNCIO_COMPATIBILITY_MODE not set for Python >= 3.8 on Windows; "
@@ -136,17 +146,28 @@ def set_compatible_event_loop_policy():
         )
     if sys.platform.startswith("win"):
         try:
-            if asyncio.get_event_loop_policy().get_event_loop() is not None:
+            # Check for a running loop to avoid RuntimeError
+            try:
+                loop = asyncio.get_running_loop()
                 logging.warning(
-                    "Cannot set event loop policy: an event loop is already active."
+                    "Cannot set event loop policy: an event loop is already running."
                 )
+                logger.debug(f"Active loop: {loop}")
                 return
+            except RuntimeError:  # No running loop
+                pass
+
+            # Log current loop state for debugging
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            logger.debug(f"Current event loop: {loop}, running={loop.is_running()}")
+
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             logging.info(
                 "Set event loop policy to WindowsSelectorEventLoopPolicy for compatibility."
             )
         except RuntimeError as e:
             logging.warning(f"Failed to set event loop policy: {e}.")
+            logger.debug(f"Current event loop: {loop}, running={loop.is_running()}")
     else:
         logging.info("No special event loop policy set for non-Windows platform.")
 
