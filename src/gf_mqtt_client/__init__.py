@@ -3,3 +3,4 @@ from .mqtt_client import MQTTClient
 from .sync_mqtt_client import SyncMQTTClient
 from .message_handler import RequestHandlerBase, ResponseHandlerBase, MessageHandlerProtocol
 from .exceptions import ResponseException
+from .asyncio_compatibility import ensure_compatible_event_loop_policy, set_compatible_event_loop_policy, configure_asyncio_compatibility

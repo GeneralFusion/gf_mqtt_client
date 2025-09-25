@@ -15,8 +15,9 @@ from .message_handler import (
     ResponseHandlerDefault,
 )
 from .exceptions import ResponseException, GatewayTimeoutResponse
-import warnings
+from .asyncio_compatibility import ensure_compatible_event_loop_policy
 
+logger = logging.getLogger(__name__)
 
 class ClientFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -24,7 +25,7 @@ class ClientFormatter(logging.Formatter):
             extra_info = ' '.join(f"{k}={v}" for k, v in record.extra.items())
             return f"{record.msg} {extra_info}"
         return super().format(record)
-    
+
 class MessageLogger(logging.LoggerAdapter):
     """
     A custom logger that can be used to log messages with additional context.
@@ -47,35 +48,6 @@ class MessageLogger(logging.LoggerAdapter):
                 kwargs["extra"].pop(key, None)
         return msg, kwargs
 
-def ensure_compatible_event_loop_policy():
-    if sys.platform.startswith("win"):
-        current_policy = asyncio.get_event_loop_policy()
-        if not isinstance(current_policy, asyncio.WindowsSelectorEventLoopPolicy):
-            warnings.warn(
-                "Your current event loop policy may not support all features "
-                "on Windows. Consider setting:\n"
-                "  asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())",
-                RuntimeWarning,
-            )
-
-
-def set_compatible_event_loop_policy():
-    if sys.platform.startswith("win"):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        logging.getLogger(__name__).info(
-            "Set event loop policy to WindowsSelectorEventLoopPolicy for compatibility."
-        )
-    else:
-        logging.getLogger(__name__).info(
-            "No special event loop policy set for non-Windows platform."
-        )
-
-
-def reset_event_loop_policy():
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    logging.getLogger(__name__).info(
-        "Reset event loop policy to DefaultEventLoopPolicy."
-    )
 
 
 def parse_method(method: Any) -> Method:
