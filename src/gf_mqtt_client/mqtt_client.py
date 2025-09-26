@@ -111,7 +111,7 @@ class MQTTClient():
         )
 
         self.logger.info(f"Initialized MQTT client to broker {self.broker}:{self.port} with identifier '{self.identifier}'")
-        # ensure_compatible_event_loop_policy()
+        ensure_compatible_event_loop_policy()
 
     def set_credentials(self, username: str, password: str):
         self._username = username
