@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.11"
 
 [[package]]
@@ -54,7 +53,7 @@ wheels = [
 
 [[package]]
 name = "gf-mqtt-client"
-version = "0.0.3"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiomqtt" },

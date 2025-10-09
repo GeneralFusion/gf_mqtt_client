@@ -2,7 +2,7 @@ import time
 import logging
 
 from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException
-from gf_mqtt_client.mqtt_client import set_compatible_event_loop
+from gf_mqtt_client.asyncio_compatibility import set_compatible_event_loop_policy
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -18,7 +18,7 @@ REQUESTOR_TAG = "2D_XX_0_9998"
 TARGET_DEVICE_TAG = "2D_XX_0_9999"
 
 # This ensures compatibility with asyncio and aiomqtt on Windows on modern Python versions.
-set_compatible_event_loop()
+set_compatible_event_loop_policy()
 
 # Request handler that processes incoming requests and sends a response.
 async def response_handler(client: SyncMQTTClient, topic: str, payload: dict) -> dict:
