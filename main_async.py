@@ -2,9 +2,7 @@ import asyncio
 import time
 import logging
 
-from gf_mqtt_client.mqtt_client import MQTTClient
-from gf_mqtt_client.message_handler import RequestHandlerBase
-from gf_mqtt_client.topic_manager import TopicManager
+from gf_mqtt_client import MQTTClient, RequestHandlerBase, TopicManager
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

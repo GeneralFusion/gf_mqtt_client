@@ -1,8 +1,7 @@
 import time
 import logging
 
-from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException
-from gf_mqtt_client.asyncio_compatibility import set_compatible_event_loop_policy
+from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException, set_compatible_event_loop_policy
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
