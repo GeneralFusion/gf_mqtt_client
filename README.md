@@ -2,6 +2,22 @@
 
 This module provides a Python-based implementation for MQTT communication inspired by the CoAP protocol, designed for asynchronous operations and potential microcontroller compatibility (e.g., Arduino). It includes a flexible payload structure to support general messaging and a get-request interaction model.
 
+## Python Compatibility
+This library has been tested on:
+  - 3.11.9
+  - 3.12.8
+  - 3.13.5
+
+It is currently not compatible with Python <3.11 or >3.13
+
+## Asyncio Compatibility
+
+Starting in Python 3.8, Windows switched its default loop policy to `WindowsProactorEventLoopPolicy`, which is incompatible with some third-party libraries (such as `paho-mqtt`, which depends on add_reader support). This library includes a module to manage asyncio compatibility - [asyncio_compatibility.py](https://github.com/generalmattza/gf_mqtt_client/blob/main/src/gf_mqtt_client/asyncio_compatibility.py), which allows developers to detect, warn about, or automatically correct such incompatibilities by setting the safer `WindowsSelectorEventLoopPolicy` when needed.
+
+To enable compatibility mode, set environment variable `ASYNCIO_COMPATIBILITY_MODE=True` and call `configure_asyncio_compatibility()` early in your application. This will ensure that the correct loop policy is used when needed. Compatibility mode can prevent subtle runtime errors caused by mismatched event loop behavior. 
+
+When an MQTTClient object is initialized, `ensure_compatible_event_loop_policy()` is run, which will generate a warning if compatibility mode is not set. To disable this warning, set environment variable `SUPPRESS_ASYNCIO_WARNINGS=True`
+
 ## Payload Structure
 
 The module defines three types of payloads: **General Payload**, **Request Payload**, and **Response Payload**. Each payload is validated using Pydantic models to ensure data integrity and consistency.

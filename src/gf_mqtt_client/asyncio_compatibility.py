@@ -6,6 +6,22 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+"""
+This module provides a diagnostic and configuration layer for Python’s asyncio event loop
+policies, with a focus on ensuring Windows compatibility across Python versions. Starting
+in Python 3.8, Windows switched its default loop policy to WindowsProactorEventLoopPolicy,
+which is incompatible with some third-party libraries (such as paho-mqtt, which depends on
+add_reader support). This module allows developers to detect, warn about, or automatically
+correct such incompatibilities by setting the safer WindowsSelectorEventLoopPolicy when
+needed.
+
+By calling configure_asyncio_compatibility() early in your application, you can prevent
+subtle runtime errors caused by mismatched event loop behavior. The module also supports
+environment-based configuration (e.g., ASYNCIO_COMPATIBILITY_MODE=True or
+SUPPRESS_ASYNCIO_WARNINGS=True), making it suitable for both development and deployment
+environments where cross-platform asyncio stability is critical.
+"""
+
 
 def ensure_compatible_event_loop_policy() -> None:
     """
