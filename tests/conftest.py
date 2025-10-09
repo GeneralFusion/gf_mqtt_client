@@ -1,19 +1,20 @@
 import logging
 import os
 import uuid
-
 import pytest_asyncio
 from dotenv import load_dotenv
 from pydantic_core import ValidationError
 
-from gf_mqtt_client.models import MQTTBrokerConfig
-from gf_mqtt_client.mqtt_client import (
+from gf_mqtt_client import (
     MQTTClient,
+    MQTTBrokerConfig,
+    RequestHandlerBase,
+    ResponseHandlerBase,
+    TopicManager,
     set_compatible_event_loop_policy,
     reset_event_loop_policy,
 )
-from gf_mqtt_client.message_handler import ResponseHandlerBase, RequestHandlerBase
-from gf_mqtt_client.topic_manager import TopicManager
+from .mock_device import MockMQTTDevice
 
 # === Load Environment and Configure Logging ===
 load_dotenv()
@@ -35,14 +36,12 @@ def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 
-from .mock_device import MockMQTTDevice
-
 # === MQTT Broker Config ===
 try:
     BROKER_CONFIG = MQTTBrokerConfig(
-        username=os.getenv("MQTT_BROKER_USERNAME"),
-        password=os.getenv("MQTT_BROKER_PASSWORD"),
-        hostname=os.getenv("MQTT_BROKER_HOSTNAME"),
+        username=os.getenv("MQTT_BROKER_USERNAME", "user"),
+        password=os.getenv("MQTT_BROKER_PASSWORD", "password"),
+        hostname=os.getenv("MQTT_BROKER_HOSTNAME", "broker.emqx.io"),
         port=int(os.getenv("MQTT_BROKER_PORT", 1883)),
     )
 except ValidationError as e:

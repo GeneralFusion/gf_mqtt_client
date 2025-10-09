@@ -1,13 +1,11 @@
-# conftest.py
-
-import time
 import pytest
 
-from gf_mqtt_client.message_handler import RequestHandlerBase
-from gf_mqtt_client.models import Method
-from gf_mqtt_client.mqtt_client import MQTTClient
-from gf_mqtt_client.sync_mqtt_client import SyncMQTTClient
-from gf_mqtt_client.topic_manager import TopicManager
+from gf_mqtt_client import (
+    RequestHandlerBase,
+    MQTTClient,
+    SyncMQTTClient, 
+    TopicManager
+)
 
 from mock_device import MockAXUVDevice
 from tests.conftest import BROKER_CONFIG

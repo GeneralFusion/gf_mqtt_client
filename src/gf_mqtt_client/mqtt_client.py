@@ -1,11 +1,9 @@
 import asyncio
-from enum import Enum
 import json
-import sys
 import uuid
-from typing import Optional, Dict, Any, Callable, Awaitable, List, Self
+from typing import Optional, Dict, Any, List, Self
 import logging
-from aiomqtt import Client, MqttError, Topic
+from aiomqtt import Client, MqttError
 from .models import ResponseCode, Method, MessageType
 from .payload_handler import PayloadHandler
 from .topic_manager import TopicManager

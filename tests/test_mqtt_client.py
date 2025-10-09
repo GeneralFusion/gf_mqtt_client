@@ -4,11 +4,11 @@ import pytest
 import asyncio
 from datetime import datetime
 
-from gf_mqtt_client.exceptions import BadRequestResponse, UnauthorizedResponse, NotFoundResponse, GatewayTimeoutResponse
+from gf_mqtt_client.exceptions import NotFoundResponse, GatewayTimeoutResponse
 from gf_mqtt_client.message_handler import ResponseHandlerBase
 from gf_mqtt_client.models import Method
-from gf_mqtt_client.mqtt_client import MQTTClient, MessageHandlerBase
-from gf_mqtt_client.payload_handler import ResponseCode, PayloadHandler
+from gf_mqtt_client.mqtt_client import MessageHandlerBase
+from gf_mqtt_client.payload_handler import ResponseCode
 from gf_mqtt_client.exceptions import *
 
 TOPIC_SUBSYSTEM = "axuv"

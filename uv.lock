@@ -61,9 +61,13 @@ dependencies = [
     { name = "msgpack" },
     { name = "paho-mqtt" },
     { name = "pydantic" },
-    { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-xdist" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -73,10 +77,12 @@ requires-dist = [
     { name = "msgpack", specifier = ">=1.1.1" },
     { name = "paho-mqtt", specifier = ">=1.6.1" },
     { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pytest", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.4.1" }]
 
 [[package]]
 name = "iniconfig"

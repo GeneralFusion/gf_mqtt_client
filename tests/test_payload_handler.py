@@ -1,4 +1,3 @@
-from pydantic import ValidationError
 import pytest
 from gf_mqtt_client.payload_handler import PayloadHandler, Method, ResponseCode
 

@@ -1,7 +1,7 @@
 import logging
 import time
 from typing import Any, Dict
-from gf_mqtt_client.models import Method, ResponseCode
+from gf_mqtt_client import Method, ResponseCode
 
 
 

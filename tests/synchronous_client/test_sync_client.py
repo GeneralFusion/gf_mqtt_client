@@ -5,9 +5,8 @@ import concurrent.futures
 from datetime import datetime
 
 from gf_mqtt_client.models import ResponseCode, Method
-from gf_mqtt_client.exceptions import BadRequestResponse, GatewayTimeoutResponse, InternalServerErrorResponse, NotFoundResponse, UnauthorizedResponse, ResponseException
+from gf_mqtt_client.exceptions import GatewayTimeoutResponse, NotFoundResponse
 from gf_mqtt_client.message_handler import ResponseHandlerBase, MessageHandlerBase
-# from tests.conftest import responder.identifier
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
