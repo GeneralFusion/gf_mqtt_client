@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import uuid
 from typing import Optional, Dict, Any, List, Self
@@ -178,18 +179,48 @@ class MQTTClient():
     def is_connected(self) -> bool:
         return self._connected.is_set()
 
+
     async def disconnect(self):
         self.logger.debug(f"Disconnecting from broker {self.broker}:{self.port}")
+
+        # 1) Block new ops immediately
+        self._connected.clear()
+
+        # 2) Stop message loop
         if self._client_task:
             self._client_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._client_task
-            except asyncio.CancelledError:
-                self.logger.debug("Cancelled message loop")
+            self._client_task = None
 
+        # 3) Close client
         if self._client:
-            await self._client.__aexit__(None, None, None)
-            self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
+            with contextlib.suppress(Exception):
+                await self._client.__aexit__(None, None, None)
+            self._client = None
+
+        # 4) Fail any pending requests so callers aren’t left hanging
+        async with self._lock:
+            for fut in self._pending_requests.values():
+                if not fut.done():
+                    fut.set_exception(asyncio.CancelledError("MQTT client disconnected"))
+            self._pending_requests.clear()
+
+        self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
+
+    # async def disconnect(self):
+    #     self.logger.debug(f"Disconnecting from broker {self.broker}:{self.port}")
+    #     if self._client_task:
+    #         self._client_task.cancel()
+    #         try:
+    #             await self._client_task
+    #         except asyncio.CancelledError:
+    #             self.logger.debug("Cancelled message loop")
+
+    #     if self._client:
+    #         await self._client.__aexit__(None, None, None)
+    #         self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
+    #     self._connected.clear()
 
     def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: Optional[dict] = None) -> dict:
         """Extract extra information from the payload for logging."""
