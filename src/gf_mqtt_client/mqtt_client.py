@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
-import json
+# import json
+import orjson
 import uuid
 from typing import Optional, Dict, Any, List, Self
 import logging
@@ -269,7 +270,7 @@ class MQTTClient():
             topic = message.topic
             payload_str = message.payload.decode()
             try:
-                payload = json.loads(payload_str)
+                payload = await asyncio.to_thread(orjson.loads, payload_str)
                 header = payload.get("header", {})
                 request_id = header.get("request_id", "N/A")
                 self.logger.debug(
@@ -309,7 +310,7 @@ class MQTTClient():
                     )
                     await default_handler.handle(self, topic, payload)
 
-            except json.JSONDecodeError:
+            except orjson.JSONDecodeError:
                 self.logger.warning(
                     f"Failed to decode JSON payload from topic {topic}: {payload_str}",
                     extra=self._extract_extras(payload)
@@ -332,7 +333,7 @@ class MQTTClient():
     async def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
-        await self._client.publish(topic, json.dumps(payload), qos=qos)
+        await self._client.publish(topic, await asyncio.to_thread(orjson.dumps, payload), qos=qos)
         self.logger.debug(f"Published to topic {topic}")
 
     async def subscribe(self, topic: str):

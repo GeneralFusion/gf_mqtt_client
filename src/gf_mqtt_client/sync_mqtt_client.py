@@ -45,7 +45,6 @@ class SyncMQTTClient:
         
         self._loop = None
         self._loop_thread = None
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mqtt-sync")
         self._connected = False
         
         # Register cleanup on exit
@@ -73,11 +72,11 @@ class SyncMQTTClient:
         if self._loop is None or not self._loop.is_running():
             self._start_event_loop()
     
-    def _run_async(self, coro):
+    def _run_async(self, coro, timeout=None):
         """Run an async coroutine and return the result."""
         self._ensure_loop_running()
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result()
+        return future.result(timeout=timeout)
 
     def connect(self):
         """Connect to the MQTT broker (blocking)."""
@@ -108,7 +107,8 @@ class SyncMQTTClient:
         
         try:
             return self._run_async(
-                self._mqtt_client.request(target_device_tag=target_device_tag, subsystem=subsystem, path=path, method=method, value=value, timeout=timeout)
+                self._mqtt_client.request(target_device_tag=target_device_tag, subsystem=subsystem, path=path, method=method, value=value, timeout=timeout),
+                timeout=timeout
             )
         except ResponseException as e:
             self._mqtt_client.logger.warning(f"Protocol error from device: {e}")
@@ -164,8 +164,6 @@ class SyncMQTTClient:
         if self._loop_thread and self._loop_thread.is_alive():
             self._loop_thread.join(timeout=1.0)
         
-        self._executor.shutdown(wait=False)
-
     def __enter__(self):
         """Context manager entry."""
         self.connect()
