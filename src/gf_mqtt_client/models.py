@@ -1,13 +1,13 @@
 from enum import Enum, StrEnum
 from typing import Dict, Optional, Union, List
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, SecretStr, field_validator, model_validator
 
 class MQTTBrokerConfig(BaseModel):
     hostname: str = "broker.emqx.io"
     port: Optional[int] = 1883
     timeout: Optional[int] = 5
     username: Optional[str] = None
-    password: Optional[str] = None
+    password: Optional[str|SecretStr] = None
 
     @model_validator(mode="after")
     def set_defaults_if_none(self) -> "MQTTBrokerConfig":

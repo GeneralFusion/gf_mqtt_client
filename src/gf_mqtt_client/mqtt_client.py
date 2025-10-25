@@ -1,10 +1,10 @@
 import asyncio
 import contextlib
-# import json
 import orjson
 import uuid
 from typing import Optional, Dict, Any, List, Self
 import logging
+from pydantic import SecretStr
 from aiomqtt import Client, MqttError
 from .models import ResponseCode, Method, MessageType
 from .payload_handler import PayloadHandler
@@ -89,7 +89,7 @@ class MQTTClient():
         self.port = port
         self.timeout = timeout
         self._username: Optional[str] = username
-        self._password: Optional[str] = password
+        self._password: Optional[str|SecretStr] = password
         if ensure_unique_identifier:
             identifier = generate_unique_id(identifier)
         else:
@@ -110,13 +110,19 @@ class MQTTClient():
             merge_extra=True
         )
 
-        self.logger.info(f"Initialized MQTT client to broker {self.broker}:{self.port} with identifier '{self.identifier}'")
+        self.logger.debug(f"Initialized MQTT client to broker {self.broker}:{self.port} with identifier '{self.identifier}'")
         ensure_compatible_event_loop_policy()
 
-    def set_credentials(self, username: str, password: str):
+    def set_credentials(self, username: str, password: str | SecretStr):
         self._username = username
-        self._password = password
-        self.logger.info(f"Credentials set for username - {username}:{password[:3]}{'*' * (len(password) - 3)}")
+        self._password = password  # Store as str or SecretStr
+        # Mask password for logging
+        password_display = (
+            password.get_secret_value()
+            if isinstance(password, SecretStr)
+            else (password or "")
+        )
+        self.logger.info(f"Credentials set for username - {username}:{password_display}")
 
     async def add_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
@@ -143,13 +149,20 @@ class MQTTClient():
             self.logger.debug("Client already connected to broker")
             return
 
-        self.logger.info(f"Connecting to broker {self.broker}:{self.port}")
+        self.logger.debug(f"Connecting to broker {self.broker}:{self.port}")
+
+        # Convert password to str just before passing to Client
+        password = (
+            self._password.get_secret_value()
+            if isinstance(self._password, SecretStr)
+            else self._password
+        )
 
         self._client = Client(
             hostname=self.broker,
             port=self.port,
             username=self._username,
-            password=self._password,
+            password=password,
             identifier=self.identifier,
         )
         try:
