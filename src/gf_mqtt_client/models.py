@@ -16,12 +16,7 @@ class MQTTBrokerConfig(BaseModel):
         if self.timeout is None:
             self.timeout = 5
         return self
-
-# class Method(StrEnum):
-#     GET = "get"
-#     POST = "post"
-#     PUT = "put"
-#     DELETE = "delete"
+        
 
 class Method(StrEnum):
     GET = "GET"
