@@ -84,6 +84,7 @@ class MQTTClient():
         password: Optional[str] = None,
         ensure_unique_identifier: bool = False,
         logger: Optional[logging.LoggerAdapter] = None,
+        qos_default: Optional[int] = 0,
     ):
         self.broker = broker
         self.port = port
@@ -103,6 +104,7 @@ class MQTTClient():
         self._connected = asyncio.Event()
         self._topic_manager = TopicManager()
         self.subscriptions = subscriptions or []
+        self.qos_default = qos_default
 
         self.logger = logger or MessageLogger(
             logging.getLogger(__name__),
@@ -185,7 +187,7 @@ class MQTTClient():
         self.subscriptions.append(request_topic)
 
         for topic in self.subscriptions:
-            await self.subscribe(topic)
+            await self.subscribe(topic, qos=self.qos_default)
 
         await self.add_message_handler(ResponseHandlerDefault())
 
@@ -221,20 +223,6 @@ class MQTTClient():
             self._pending_requests.clear()
 
         self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
-
-    # async def disconnect(self):
-    #     self.logger.debug(f"Disconnecting from broker {self.broker}:{self.port}")
-    #     if self._client_task:
-    #         self._client_task.cancel()
-    #         try:
-    #             await self._client_task
-    #         except asyncio.CancelledError:
-    #             self.logger.debug("Cancelled message loop")
-
-    #     if self._client:
-    #         await self._client.__aexit__(None, None, None)
-    #         self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
-    #     self._connected.clear()
 
     def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: Optional[dict] = None) -> dict:
         """Extract extra information from the payload for logging."""
@@ -343,16 +331,18 @@ class MQTTClient():
         return payload
 
 
-    async def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
+    async def publish(self, topic: str, payload: Dict[str, Any], qos: Optional[int|None] = None):
+        qos = qos if qos is not None else self.qos_default
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
         await self._client.publish(topic, await asyncio.to_thread(orjson.dumps, payload), qos=qos)
         self.logger.debug(f"Published to topic {topic}")
 
-    async def subscribe(self, topic: str):
+    async def subscribe(self, topic: str, qos: Optional[int|None] = None):
+        qos = qos if qos is not None else self.qos_default
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
-        await self._client.subscribe(topic)
+        await self._client.subscribe(topic, qos=qos)
         self.logger.debug(f"Subscribed to topic {topic}")
 
     def _truncate_str(self, input_string: str, output_length: int = 50) -> str:
@@ -367,12 +357,13 @@ class MQTTClient():
 
     async def request(
         self,
-        target_device_tag,
-        subsystem,
+        target_device_tag: str,
+        subsystem: str,
         path: str,
         method: Method = Method.GET,
         value: Any = None,
         timeout: int = None,
+        qos: Optional[int|None] = None,
     ) -> Optional[Dict[str, Any]]:
         method = parse_method(method)
 
@@ -399,8 +390,8 @@ class MQTTClient():
         async with self._lock:
             self._pending_requests[request_id] = future
 
-        await self.subscribe(response_topic)
-        await self.publish(request_topic, request_payload)
+        await self.subscribe(response_topic, qos=qos)
+        await self.publish(topic=request_topic, payload=request_payload, qos=qos)
 
         self.logger.info(
             f"'{Method(method)}' request sent to '{target_device_tag}' on uri-path '{path}'",

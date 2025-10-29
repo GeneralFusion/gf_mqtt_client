@@ -17,9 +17,17 @@ class SyncMQTTClient:
     Provides blocking methods that can be used in non-async code.
     """
 
-    def __init__(self, broker: str, port: int = 1883, timeout: int = 5, 
-                 identifier: Optional[str] = None, subscriptions: Optional[list] = None,
-                 username: Optional[str] = None, password: Optional[str] = None, ensure_unique_identifier: bool = False):
+    def __init__(self,
+                 broker: str, 
+                 port: int = 1883, 
+                 timeout: int = 5, 
+                 identifier: Optional[str] = None, 
+                 subscriptions: Optional[list] = None,
+                 username: Optional[str] = None,
+                 password: Optional[str] = None,
+                 ensure_unique_identifier: bool = False,
+                 qos_default: Optional[int] = 0
+                 ) -> None:
         """
         Initialize the synchronous MQTT client wrapper.
         
@@ -40,7 +48,8 @@ class SyncMQTTClient:
             subscriptions=subscriptions,
             username=username,
             password=password,
-            ensure_unique_identifier=ensure_unique_identifier
+            ensure_unique_identifier=ensure_unique_identifier,
+            qos_default=qos_default
         )
 
         self._loop = None
@@ -92,7 +101,7 @@ class SyncMQTTClient:
             self._run_async(self._mqtt_client.disconnect())
             self._connected = False
 
-    def request(self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int|None = None) -> Optional[Dict[str, Any]]:
+    def request(self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int|None = None, qos: Optional[int] = 0) -> Optional[Dict[str, Any]]:
         """
         Send a request and wait for response (blocking).
         _grace_period of 0.5 seconds is added to timeout for improved reliability.
@@ -113,7 +122,7 @@ class SyncMQTTClient:
             effective_timeout += self._grace_period
         try:
             return self._run_async(
-                self._mqtt_client.request(target_device_tag=target_device_tag, subsystem=subsystem, path=path, method=method, value=value, timeout=timeout),
+                self._mqtt_client.request(target_device_tag=target_device_tag, subsystem=subsystem, path=path, method=method, value=value, timeout=timeout, qos=qos),
                 timeout=effective_timeout
             )
         except ResponseException as e:
@@ -139,12 +148,12 @@ class SyncMQTTClient:
 
         self._run_async(self._mqtt_client.publish(topic, payload, qos))
 
-    def subscribe(self, topic: str):
+    def subscribe(self, topic: str, qos: int = 0):
         """Subscribe to a topic (blocking)."""
         if not self._connected:
             raise RuntimeError("Client not connected. Call connect() first.")
 
-        self._run_async(self._mqtt_client.subscribe(topic))
+        self._run_async(self._mqtt_client.subscribe(topic, qos=qos))
 
     def add_message_handler(self, handler: MessageHandlerProtocol):
         """Add a message handler (blocking)."""
