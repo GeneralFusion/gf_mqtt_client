@@ -19,37 +19,44 @@ class SyncMQTTClient:
 
     def __init__(self,
                  broker: str, 
-                 port: int = 1883, 
-                 timeout: int = 5, 
-                 identifier: Optional[str] = None, 
-                 subscriptions: Optional[list] = None,
-                 username: Optional[str] = None,
-                 password: Optional[str] = None,
+                 port: int | None = None, 
+                 timeout: int | None = None, 
+                 identifier: str | None = None, 
+                 subscriptions: list | None = None,
+                 username: str | None = None,
+                 password: str | None = None,
                  ensure_unique_identifier: bool = False,
-                 qos_default: Optional[int] = 0
+                 qos_default: int | None = None
                  ) -> None:
         """
         Initialize the synchronous MQTT client wrapper.
         
         Args:
             broker: MQTT broker hostname
-            port: MQTT broker port (default: 1883)
+            port: MQTT broker port
             timeout: Request timeout in seconds (default: 5)
             identifier: Client identifier (auto-generated if None)
             subscriptions: List of topics to subscribe to
             username: MQTT username (optional)
             password: MQTT password (optional)
         """
+        # Handle MQTTClient specific initialization parameters
+        # Ensures that only specified kwargs are passed to MQTTClient, retaining defaults where appropriate
+        kwargs = {}
+        if timeout is not None:
+            kwargs['timeout'] = timeout
+        if qos_default is not None:
+            kwargs['qos_default'] = qos_default
+
         self._mqtt_client = MQTTClient(
             broker=broker,
             port=port,
-            timeout=timeout,
+            **kwargs,
             identifier=identifier,
             subscriptions=subscriptions,
             username=username,
             password=password,
             ensure_unique_identifier=ensure_unique_identifier,
-            qos_default=qos_default
         )
 
         self._loop = None
