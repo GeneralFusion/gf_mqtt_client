@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import orjson
 import uuid
-from typing import Optional, Dict, Any, List, Self
+from typing import Any, Self
 import logging
 from pydantic import SecretStr
 from aiomqtt import Client, MqttError
@@ -31,7 +31,7 @@ class MessageLogger(logging.LoggerAdapter):
     A custom logger that can be used to log messages with additional context.
     """
 
-    def __init__(self, logger: logging.Logger, extra: Optional[Dict[str, Any]] = None, merge_extra: bool = False, exclude_extras: Optional[List[str]] = None):
+    def __init__(self, logger: logging.Logger, extra: dict[str, Any] | None = None, merge_extra: bool = False, exclude_extras: list[str] | None = None):
         super().__init__(logger, extra or {})
         self.logger = logger
         self.extra = extra
@@ -99,9 +99,9 @@ class MQTTClient:
         self.identifier = identifier
         self._client: Client | None = None
         self._client_task: asyncio.Task | None = None
-        self._pending_requests: Dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
-        self._message_handlers: List[MessageHandlerBase] = []
+        self._message_handlers: list[MessageHandlerBase] = []
         self._connected = asyncio.Event()
         self._topic_manager = TopicManager()
         self.subscriptions = subscriptions or []
@@ -231,7 +231,7 @@ class MQTTClient:
 
         self.logger.info(f"Disconnected from broker {self.broker}:{self._port}")
 
-    def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: Optional[dict] = None) -> dict:
+    def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: dict | None = None) -> dict:
         """Extract extra information from the payload for logging."""
 
         def _determine_message_type(payload: dict) -> str | None:
@@ -332,19 +332,19 @@ class MQTTClient:
                 raise e
 
     async def _default_handler(
-        self, client: Self, topic: str, payload: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, client: Self, topic: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         self.logger.debug(f"Default handler for topic {topic}")
         return payload
 
-    async def publish(self, topic: str, payload: Dict[str, Any], qos: Optional[int|None] = None):
+    async def publish(self, topic: str, payload: dict[str, Any], qos: int | None = None):
         qos = qos if qos is not None else self.qos_default
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
         await self._client.publish(topic, await asyncio.to_thread(orjson.dumps, payload), qos=qos)
         self.logger.debug(f"Published to topic {topic}")
 
-    async def subscribe(self, topic: str, qos: Optional[int|None] = None):
+    async def subscribe(self, topic: str, qos: int | None = None):
         qos = qos if qos is not None else self.qos_default
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
@@ -370,7 +370,7 @@ class MQTTClient:
         value: Any = None,
         timeout: int|None = None,
         qos: int|None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         method = parse_method(method)
 
         if not self._connected.is_set():
@@ -438,7 +438,7 @@ class MQTTClient:
 if __name__ == "__main__":
 
     async def main():
-        async def request_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
+        async def request_handler(payload: dict[str, Any]) -> dict[str, Any]:
             logging.info(f"Handling request: {payload}")
             payload_handler = PayloadHandler()
             return payload_handler.create_response_payload(
@@ -448,10 +448,10 @@ if __name__ == "__main__":
                 body={"data": [1, 2, 3]},
             )
 
-        async def logging_handler(payload: Dict[str, Any]) -> None:
+        async def logging_handler(payload: dict[str, Any]) -> None:
             logging.debug(f"Logging message: {payload}")
         
-        async def response_handler(payload: Dict[str, Any]) -> None:
+        async def response_handler(payload: dict[str, Any]) -> None:
             if "response_code" in payload.get("header", {}):
                 logging.info(f"Received response: {payload}")
 

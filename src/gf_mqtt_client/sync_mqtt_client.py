@@ -1,9 +1,9 @@
 import asyncio
 import threading
-from time import sleep, time
-from typing import Any, Dict, Optional, List
-from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 import atexit
+
+from pydantic import SecretStr
 
 from gf_mqtt_client.exceptions import ResponseException
 from gf_mqtt_client.models import Method
@@ -24,7 +24,7 @@ class SyncMQTTClient:
                  identifier: str | None = None, 
                  subscriptions: list | None = None,
                  username: str | None = None,
-                 password: str | None = None,
+                 password: str | SecretStr | None = None,
                  ensure_unique_identifier: bool = False,
                  qos_default: int | None = None
                  ) -> None:
@@ -108,7 +108,7 @@ class SyncMQTTClient:
             self._run_async(self._mqtt_client.disconnect())
             self._connected = False
 
-    def request(self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int|None = None, qos: Optional[int] = 0) -> Optional[Dict[str, Any]]:
+    def request(self, target_device_tag, subsystem, path: str, method: Method = Method.GET, value: Any = None, timeout: int | None = None, qos: int | None = 0) -> dict[str, Any]:
         """
         Send a request and wait for response (blocking).
         _grace_period of 0.5 seconds is added to timeout for improved reliability.
@@ -148,7 +148,7 @@ class SyncMQTTClient:
             )
             raise
 
-    def publish(self, topic: str, payload: Dict[str, Any], qos: int = 0):
+    def publish(self, topic: str, payload: dict[str, Any], qos: int = 0):
         """Publish a message (blocking)."""
         if not self._connected:
             raise RuntimeError("Client not connected. Call connect() first.")
