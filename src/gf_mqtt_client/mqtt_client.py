@@ -49,7 +49,6 @@ class MessageLogger(logging.LoggerAdapter):
         return msg, kwargs
 
 
-
 def parse_method(method: Any) -> Method:
     if isinstance(method, Method):
         return method
@@ -68,36 +67,38 @@ def parse_method(method: Any) -> Method:
     return method
 
 
-def generate_unique_id(prefix: str = "mqtt_client") -> str:
+def generate_unique_id(prefix: str|None = "mqtt_client") -> str:
+    if prefix is None:
+        return str(uuid.uuid4())
     return f"{prefix}-{uuid.uuid4()}"
 
 
-class MQTTClient():
+class MQTTClient:
     def __init__(
         self,
         broker: str,
-        port: int = 1883,
+        port: int | None = None,
         timeout: int = 5,
-        identifier: Optional[str] = None,
-        subscriptions: Optional[list] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        identifier: str | None = None,
+        subscriptions: list | None = None,
+        username: str | None = None,
+        password: str | SecretStr | None = None,
         ensure_unique_identifier: bool = False,
-        logger: Optional[logging.LoggerAdapter] = None,
-        qos_default: Optional[int] = 0,
+        logger: logging.LoggerAdapter | None = None,
+        qos_default: int = 0,
     ):
         self.broker = broker
-        self.port = port
+        self._port = port
         self.timeout = timeout
-        self._username: Optional[str] = username
-        self._password: Optional[str|SecretStr] = password
+        self._username = username
+        self._password = password
         if ensure_unique_identifier:
             identifier = generate_unique_id(identifier)
         else:
             identifier = identifier or generate_unique_id()
         self.identifier = identifier
-        self._client: Optional[Client] = None
-        self._client_task: Optional[asyncio.Task] = None
+        self._client: Client | None = None
+        self._client_task: asyncio.Task | None = None
         self._pending_requests: Dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
         self._message_handlers: List[MessageHandlerBase] = []
@@ -112,19 +113,16 @@ class MQTTClient():
             merge_extra=True
         )
 
-        self.logger.debug(f"Initialized MQTT client to broker {self.broker}:{self.port} with identifier '{self.identifier}'")
+        self.logger.debug(f"Initialized MQTT client to broker {self.broker}:{self._port} with identifier '{self.identifier}'")
         ensure_compatible_event_loop_policy()
 
     def set_credentials(self, username: str, password: str | SecretStr):
         self._username = username
-        self._password = password  # Store as str or SecretStr
-        # Mask password for logging
-        password_display = (
-            password.get_secret_value()
-            if isinstance(password, SecretStr)
-            else (password or "")
+        self._password = password
+        self.logger.debug(
+            "Credentials set for username",
+            extra={"username": username, "password": "***"},
         )
-        self.logger.info(f"Credentials set for username - {username}:{password_display}")
 
     async def add_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
@@ -151,29 +149,39 @@ class MQTTClient():
             self.logger.debug("Client already connected to broker")
             return
 
-        self.logger.debug(f"Connecting to broker {self.broker}:{self.port}")
+        self.logger.debug(
+            f"Connecting to broker {self.broker}:{self._port or '(default)'}"
+        )
 
-        # Convert password to str just before passing to Client
+        # Convert SecretStr to str lazily
         password = (
             self._password.get_secret_value()
             if isinstance(self._password, SecretStr)
             else self._password
         )
 
-        self._client = Client(
-            hostname=self.broker,
-            port=self.port,
-            username=self._username,
-            password=password,
-            identifier=self.identifier,
-        )
+        kwargs: dict[str, Any] = {"hostname": self.broker}
+        if self._port is not None:
+            kwargs["port"] = self._port
+        if self._username is not None:
+            kwargs["username"] = self._username
+        if password is not None:
+            kwargs["password"] = password
+        if self.identifier is not None:
+            kwargs["identifier"] = self.identifier
+
+        self._client = Client(**kwargs)
         try:
             await self._client.__aenter__()
-            self.logger.info(f"Connected to broker {self.broker}:{self.port}")
+            self.logger.info(
+                f"Connected to broker {self.broker}:{kwargs.get('port', '(default)')}"
+            )
             self._client_task = asyncio.create_task(self._message_loop())
             self._connected.set()
         except MqttError as e:
-            self.logger.error(f"Failed to connect to broker {self.broker}:{self.port}: {e}")
+            self.logger.error(
+                f"Failed to connect to broker {self.broker}:{kwargs.get('port', '(default)')}: {e}"
+            )
             raise GatewayTimeoutResponse(
                 response_code=ResponseCode.GATEWAY_TIMEOUT.value,
                 path="",
@@ -195,9 +203,8 @@ class MQTTClient():
     def is_connected(self) -> bool:
         return self._connected.is_set()
 
-
     async def disconnect(self):
-        self.logger.debug(f"Disconnecting from broker {self.broker}:{self.port}")
+        self.logger.debug(f"Disconnecting from broker {self.broker}:{self._port}")
 
         # 1) Block new ops immediately
         self._connected.clear()
@@ -222,12 +229,12 @@ class MQTTClient():
                     fut.set_exception(asyncio.CancelledError("MQTT client disconnected"))
             self._pending_requests.clear()
 
-        self.logger.info(f"Disconnected from broker {self.broker}:{self.port}")
+        self.logger.info(f"Disconnected from broker {self.broker}:{self._port}")
 
     def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: Optional[dict] = None) -> dict:
         """Extract extra information from the payload for logging."""
 
-        def _determine_message_type(payload: dict) -> str:
+        def _determine_message_type(payload: dict) -> str | None:
             if "header" in payload and "method" in payload["header"]:
                 return MessageType.REQUEST.value
             if "header" in payload and "response_code" in payload["header"]:
@@ -330,7 +337,6 @@ class MQTTClient():
         self.logger.debug(f"Default handler for topic {topic}")
         return payload
 
-
     async def publish(self, topic: str, payload: Dict[str, Any], qos: Optional[int|None] = None):
         qos = qos if qos is not None else self.qos_default
         if not self._connected.is_set():
@@ -362,9 +368,9 @@ class MQTTClient():
         path: str,
         method: Method = Method.GET,
         value: Any = None,
-        timeout: int = None,
-        qos: Optional[int|None] = None,
-    ) -> Optional[Dict[str, Any]]:
+        timeout: int|None = None,
+        qos: int|None = None,
+    ) -> Dict[str, Any]:
         method = parse_method(method)
 
         if not self._connected.is_set():
@@ -442,14 +448,12 @@ if __name__ == "__main__":
                 body={"data": [1, 2, 3]},
             )
 
-        async def logging_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
+        async def logging_handler(payload: Dict[str, Any]) -> None:
             logging.debug(f"Logging message: {payload}")
-            return None
-
-        async def response_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
+        
+        async def response_handler(payload: Dict[str, Any]) -> None:
             if "response_code" in payload.get("header", {}):
                 logging.info(f"Received response: {payload}")
-            return None
 
         client = MQTTClient("localhost")
         await client.add_message_handler(
