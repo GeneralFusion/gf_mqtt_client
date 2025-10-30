@@ -332,12 +332,12 @@ class MQTTClient:
                 raise e
 
     async def _default_handler(
-        self, client: Self, topic: str, payload: dict[str, Any]
+        self, client: Self, topic: str, payload: Any
     ) -> dict[str, Any]:
         self.logger.debug(f"Default handler for topic {topic}")
         return payload
 
-    async def publish(self, topic: str, payload: dict[str, Any], qos: int | None = None):
+    async def publish(self, topic: str, payload: Any, qos: int | None = None):
         qos = qos if qos is not None else self.qos_default
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
@@ -438,7 +438,7 @@ class MQTTClient:
 if __name__ == "__main__":
 
     async def main():
-        async def request_handler(payload: dict[str, Any]) -> dict[str, Any]:
+        async def request_handler(payload: Any) -> dict[str, Any]:
             logging.info(f"Handling request: {payload}")
             payload_handler = PayloadHandler()
             return payload_handler.create_response_payload(
@@ -448,10 +448,10 @@ if __name__ == "__main__":
                 body={"data": [1, 2, 3]},
             )
 
-        async def logging_handler(payload: dict[str, Any]) -> None:
+        async def logging_handler(payload: Any) -> None:
             logging.debug(f"Logging message: {payload}")
-        
-        async def response_handler(payload: dict[str, Any]) -> None:
+
+        async def response_handler(payload: Any) -> None:
             if "response_code" in payload.get("header", {}):
                 logging.info(f"Received response: {payload}")
 
