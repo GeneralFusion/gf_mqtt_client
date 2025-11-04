@@ -1,79 +1,24 @@
 import asyncio
 import contextlib
 import orjson
-import uuid
 from typing import Any, Self
 import logging
 from pydantic import SecretStr
 from aiomqtt import Client, MqttError
-from .models import ResponseCode, Method, MessageType
-from .payload_handler import PayloadHandler
-from .topic_manager import TopicManager
+from ..core.models import ResponseCode, Method, MessageType
 from .message_handler import (
-    MessageHandlerBase,
     MessageHandlerProtocol,
+    MessageHandlerBase,
     ResponseHandlerDefault,
 )
-from .exceptions import ResponseException, GatewayTimeoutResponse
-from .asyncio_compatibility import ensure_compatible_event_loop_policy
+from ..core.exceptions import ResponseException, GatewayTimeoutResponse
+from .compatibility import ensure_compatible_event_loop_policy
+from ..core.base import MQTTClientBase, parse_method, MessageLogger
 
 logger = logging.getLogger(__name__)
 
-class ClientFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        if hasattr(record, 'extra') and isinstance(record.extra, dict):
-            extra_info = ' '.join(f"{k}={v}" for k, v in record.extra.items())
-            return f"{record.msg} {extra_info}"
-        return super().format(record)
 
-class MessageLogger(logging.LoggerAdapter):
-    """
-    A custom logger that can be used to log messages with additional context.
-    """
-
-    def __init__(self, logger: logging.Logger, extra: dict[str, Any] | None = None, merge_extra: bool = False, exclude_extras: list[str] | None = None):
-        super().__init__(logger, extra or {})
-        self.logger = logger
-        self.extra = extra
-        self.merge_extra = merge_extra
-        self.exclude_extras = exclude_extras or []
-
-    def process(self, msg, kwargs):
-        if self.merge_extra and "extra" in kwargs:
-            kwargs["extra"] = {**self.extra, **kwargs["extra"]}
-        else:
-            kwargs["extra"] = self.extra
-        if self.exclude_extras:
-            for key in self.exclude_extras:
-                kwargs["extra"].pop(key, None)
-        return msg, kwargs
-
-
-def parse_method(method: Any) -> Method:
-    if isinstance(method, Method):
-        return method
-    if isinstance(method, str):
-        try:
-            method = Method[method.upper()]
-        except KeyError:
-            raise ValueError(f"Invalid method: {method}")
-    elif isinstance(method, int):
-        try:
-            method = Method(method)
-        except ValueError:
-            raise ValueError(f"Invalid method value: {method}")
-    else:
-        raise ValueError(f"Method must be an int or str, got {type(method)}")
-    return method
-
-
-def generate_unique_id(prefix: str|None = "mqtt_client") -> str:
-    if prefix is None:
-        return str(uuid.uuid4())
-    return f"{prefix}-{uuid.uuid4()}"
-
-
-class MQTTClient:
+class MQTTClient(MQTTClientBase):
     def __init__(
         self,
         broker: str,
@@ -87,42 +32,30 @@ class MQTTClient:
         logger: logging.LoggerAdapter | None = None,
         qos_default: int = 0,
     ):
-        self.broker = broker
-        self._port = port
-        self.timeout = timeout
-        self._username = username
-        self._password = password
-        if ensure_unique_identifier:
-            identifier = generate_unique_id(identifier)
-        else:
-            identifier = identifier or generate_unique_id()
-        self.identifier = identifier
+        # Initialize base class with shared configuration
+        super().__init__(
+            broker=broker,
+            port=port,
+            timeout=timeout,
+            identifier=identifier,
+            subscriptions=subscriptions,
+            username=username,
+            password=password,
+            ensure_unique_identifier=ensure_unique_identifier,
+            logger=logger,
+            qos_default=qos_default,
+        )
+
+        # Async-specific attributes
         self._client: Client | None = None
         self._client_task: asyncio.Task | None = None
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
-        self._message_handlers: list[MessageHandlerBase] = []
+        self._message_handlers: list[MessageHandlerProtocol] = []
         self._connected = asyncio.Event()
-        self._topic_manager = TopicManager()
-        self.subscriptions = subscriptions or []
-        self.qos_default = qos_default
 
-        self.logger = logger or MessageLogger(
-            logging.getLogger(__name__),
-            extra={"client_id": self.identifier},
-            merge_extra=True
-        )
-
-        self.logger.debug(f"Initialized MQTT client to broker {self.broker}:{self._port} with identifier '{self.identifier}'")
+        # Ensure compatible event loop policy for Windows
         ensure_compatible_event_loop_policy()
-
-    def set_credentials(self, username: str, password: str | SecretStr):
-        self._username = username
-        self._password = password
-        self.logger.debug(
-            "Credentials set for username",
-            extra={"username": username, "password": "***"},
-        )
 
     async def add_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
@@ -131,7 +64,7 @@ class MQTTClient:
             self._message_handlers.append(handler)
             self.logger.debug(f"Added message handler {handler.__class__.__name__}")
 
-    async def remove_message_handler(self, handler: MessageHandlerBase):
+    async def remove_message_handler(self, handler: MessageHandlerProtocol):
         async with self._lock:
             if handler in self._message_handlers:
                 self._message_handlers.remove(handler)
@@ -140,9 +73,6 @@ class MQTTClient:
                 )
             else:
                 self.logger.warning(f"Handler {handler.__class__.__name__} not found")
-
-    def generate_request_id(self) -> str:
-        return str(uuid.uuid4())
 
     async def connect(self):
         if self._connected.is_set():
@@ -231,51 +161,9 @@ class MQTTClient:
 
         self.logger.info(f"Disconnected from broker {self.broker}:{self._port}")
 
-    def _extract_extras(self, payload: dict, max_len: int = 50, extra_extras: dict | None = None) -> dict:
-        """Extract extra information from the payload for logging."""
-
-        def _determine_message_type(payload: dict) -> str | None:
-            if "header" in payload and "method" in payload["header"]:
-                return MessageType.REQUEST.value
-            if "header" in payload and "response_code" in payload["header"]:
-                return MessageType.RESPONSE.value
-
-            return MessageType.UNKNOWN.value
-
-        assert max_len > 0, "max_len must be greater than 0"
-
-        header = payload.get("header", {})
-        source = header.get("source", "unknown")
-        target = header.get("target", "unknown")
-        request_id = header.get("request_id", "N/A")
-        correlation_id = header.get("correlation_id", None)
-        path = header.get("path", None)
-        response_code = header.get("response_code", None)
-        message_type = _determine_message_type(payload)
-
-        extra_new = {}
-        extra_new["source"] = source
-        extra_new["target"] = target
-        extra_new["request_id"] = request_id
-        extra_new["correlation_id"] = correlation_id
-        extra_new["path"] = path
-        extra_new["message_type"] = message_type
-        extra_new["response_code"] = response_code
-
-        # Post-processing of extra fields
-        for k, v in extra_new.items():
-
-            # Truncate string values to max_len and append "..." if truncated
-            self._truncate_str(v, output_length=max_len) if isinstance(v, str) and len(v) > max_len else v
-
-        # Remove keys with None values
-        extra_new = {k: v for k, v in extra_new.items() if v is not None}
-
-        return {**extra_new, **(extra_extras or {})}    
-
     async def _message_loop(self):
         async for message in self._client.messages:
-            topic = message.topic
+            topic = str(message.topic)  # Convert Topic object to string
             payload_str = message.payload.decode()
             try:
                 payload = await asyncio.to_thread(orjson.loads, payload_str)
@@ -351,16 +239,6 @@ class MQTTClient:
         await self._client.subscribe(topic, qos=qos)
         self.logger.debug(f"Subscribed to topic {topic}")
 
-    def _truncate_str(self, input_string: str, output_length: int = 50) -> str:
-        if not isinstance(input_string, str):
-            try:
-                input_string = str(input_string)
-            except Exception:
-                return input_string
-        if len(input_string) > output_length:
-            return input_string[:output_length] + "..."
-        return input_string
-
     async def request(
         self,
         target_device_tag: str,
@@ -376,10 +254,9 @@ class MQTTClient:
         if not self._connected.is_set():
             raise RuntimeError("Client not connected")
 
-        payload_handler = PayloadHandler()
         request_id = self.generate_request_id()
 
-        request_payload = payload_handler.create_request_payload(
+        request_payload = self._payload_handler.create_request_payload(
             method=method, path=path, request_id=request_id, body=value, source=self.identifier
         )
 
@@ -438,7 +315,7 @@ class MQTTClient:
 if __name__ == "__main__":
 
     async def main():
-        async def request_handler(payload: Any) -> dict[str, Any]:
+        async def request_handler(client, topic: str, payload: Any) -> dict[str, Any]:
             logging.info(f"Handling request: {payload}")
             payload_handler = PayloadHandler()
             return payload_handler.create_response_payload(
@@ -448,31 +325,31 @@ if __name__ == "__main__":
                 body={"data": [1, 2, 3]},
             )
 
-        async def logging_handler(payload: Any) -> None:
+        async def logging_handler(client, topic: str, payload: Any) -> None:
             logging.debug(f"Logging message: {payload}")
 
-        async def response_handler(payload: Any) -> None:
+        async def response_handler(client, topic: str, payload: Any) -> None:
             if "response_code" in payload.get("header", {}):
                 logging.info(f"Received response: {payload}")
 
         client = MQTTClient("localhost")
         await client.add_message_handler(
             MessageHandlerBase(
-                can_handle=lambda p: "method" in p.get("header", {}),
+                can_handle=lambda c, t, p: "method" in p.get("header", {}),
                 process=request_handler,
                 propagate=False,
             )
         )
         await client.add_message_handler(
             MessageHandlerBase(
-                can_handle=lambda p: True,
+                can_handle=lambda c, t, p: True,
                 process=logging_handler,
                 propagate=True,
             )
         )
         await client.add_message_handler(
             MessageHandlerBase(
-                can_handle=lambda p: "response_code" in p.get("header", {}),
+                can_handle=lambda c, t, p: "response_code" in p.get("header", {}),
                 process=response_handler,
                 propagate=False,
             )

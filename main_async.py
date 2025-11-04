@@ -2,7 +2,7 @@ import asyncio
 import time
 import logging
 
-from gf_mqtt_client import MQTTClient, RequestHandlerBase, TopicManager
+from gf_mqtt_client import MQTTClient, RequestHandlerBase, TopicManager, configure_asyncio_compatibility
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -12,6 +12,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 PUBLIC_BROKER = "broker.emqx.io"
 PUBLIC_PORT = 1883
 DEVICE_TAG = "2D_XX_0_9999"
+
+# Configure asyncio compatibility for Windows
+configure_asyncio_compatibility()
 
 # The following function creates a client, which listens for requests and responds with a mock response.
 # It simulates a device that can handle requests for a specific path, in this case, "mock".

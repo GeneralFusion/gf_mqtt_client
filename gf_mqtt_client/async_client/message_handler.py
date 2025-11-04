@@ -1,62 +1,25 @@
+"""
+Async message handlers for the async MQTT client.
+"""
 from typing import Any, Awaitable, Callable, Dict, Optional, runtime_checkable, Protocol
 import logging
-from .models import ResponseCode
-from .exceptions import *
-from .topic_manager import TopicManager
-# from src.mqtt_client import MQTTClient
-MQTTClient = Any  # Placeholder for the actual MQTTClient type, replace with the correct import
+
+from ..core.message_handler import handle_response_with_exception
+
+# Type placeholder for MQTTClient to avoid circular imports
+MQTTClient = Any
 
 logger = logging.getLogger(__name__)
-# === Exceptions ===
 
 
-# Map response codes to exceptions
-RESPONSE_CODE_EXCEPTION_MAP = {
-    ResponseCode.BAD_REQUEST: BadRequestResponse,
-    ResponseCode.UNAUTHORIZED: UnauthorizedResponse,
-    ResponseCode.BAD_OPTION: BadOptionResponse,
-    ResponseCode.FORBIDDEN: ForbiddenResponse,
-    ResponseCode.NOT_FOUND: NotFoundResponse,
-    ResponseCode.METHOD_NOT_ALLOWED: MethodNotAllowedResponse,
-    ResponseCode.NOT_ACCEPTABLE: NotAcceptableResponse,
-    ResponseCode.PRECONDITION_FAILED: PreconditionFailedResponse,
-    ResponseCode.REQUEST_ENTITY_TOO_LARGE: RequestEntityTooLargeResponse,
-    ResponseCode.UNSUPPORTED_CONTENT_FORMAT: UnsupportedContentFormatResponse,
-    ResponseCode.INTERNAL_SERVER_ERROR: InternalServerErrorResponse,
-    ResponseCode.NOT_IMPLEMENTED: NotImplementedResponse,
-    ResponseCode.BAD_GATEWAY: BadGatewayResponse,
-    ResponseCode.SERVICE_UNAVAILABLE: ServiceUnavailableResponse,
-    ResponseCode.GATEWAY_TIMEOUT: GatewayTimeoutResponse,
-    ResponseCode.PROXYING_NOT_SUPPORTED: ProxyingNotSupportedResponse,
-}
-
-
-def handle_response_with_exception(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    topic_manager = TopicManager()
-
-    header = payload.get("header", {})
-    method = header.get("method")
-    request_id = header.get("request_id")
-    path = header.get("path")
-    response_code_value = header.get("response_code")
-    detail = payload.get("body") or header.get("location") or header.get("error_message")
-    target_tag = topic_manager.get_target_device_tag_from_topic(topic)
-
-    if response_code_value is not None:
-        try:
-            response_code = ResponseCode(response_code_value)
-        except ValueError:
-            raise ResponseException(f"Unknown response code: {response_code_value}")
-
-        exception_class = RESPONSE_CODE_EXCEPTION_MAP.get(response_code)
-        if exception_class:
-            raise exception_class(response_code=response_code.value, path=path, detail=str(detail), source=client.identifier, target=target_tag, request_id=request_id, method=method)
-
-
-# === Handler Protocol ===
+# === Async Handler Protocol ===
 
 @runtime_checkable
 class MessageHandlerProtocol(Protocol):
+    """
+    Protocol for async message handlers.
+    Used by async MQTT client.
+    """
     def can_handle(self, client: MQTTClient, topic: str, payload: Dict[str, Any]) -> bool:
         ...
 
@@ -68,9 +31,13 @@ class MessageHandlerProtocol(Protocol):
         ...
 
 
-# === Base Handler ===
+# === Base Handler (Async) ===
 
 class MessageHandlerBase:
+    """
+    Base async message handler.
+    Used by async MQTT client.
+    """
     def __init__(
         self,
         can_handle: Callable[[MQTTClient, str, Dict[str, Any]], bool],
@@ -107,9 +74,10 @@ class MessageHandlerBase:
         return payload
 
 
-# === Response Handler Base ===
+# === Response Handler (Async) ===
 
 class ResponseHandlerBase(MessageHandlerBase):
+    """Async response handler for async MQTT client."""
     def __init__(
         self,
         process: Callable[[MQTTClient, str, Dict[str, Any]], Awaitable[Dict[str, Any]]],
@@ -127,9 +95,10 @@ class ResponseHandlerBase(MessageHandlerBase):
         )
 
 
-# === Request Handler Base ===
+# === Request Handler (Async) ===
 
 class RequestHandlerBase(MessageHandlerBase):
+    """Async request handler for async MQTT client."""
     def __init__(
         self,
         process: Callable[[MQTTClient, str, Dict[str, Any]], Awaitable[Dict[str, Any]]],
@@ -146,9 +115,10 @@ class RequestHandlerBase(MessageHandlerBase):
         )
 
 
-# === Default Handlers ===
+# === Default Handlers (Async) ===
 
 class ResponseHandlerDefault(ResponseHandlerBase):
+    """Default async response handler."""
     def __init__(self):
         async def process_default_response(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             logger.debug(f"Response received: {self._truncate_payload(payload)}", extra={"topic": topic, "client_id": client.identifier})
@@ -160,9 +130,20 @@ class ResponseHandlerDefault(ResponseHandlerBase):
 
 
 class RequestHandlerDefault(RequestHandlerBase):
+    """Default async request handler."""
     def __init__(self):
         async def process_default_request(client: MQTTClient, topic: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             logger.debug(f"Request received: {self._truncate_payload(payload)}", extra={"topic": topic, "client_id": client.identifier})
             return payload
 
         super().__init__(process=process_default_request, propagate=True)
+
+
+__all__ = [
+    "MessageHandlerProtocol",
+    "MessageHandlerBase",
+    "ResponseHandlerBase",
+    "RequestHandlerBase",
+    "ResponseHandlerDefault",
+    "RequestHandlerDefault",
+]

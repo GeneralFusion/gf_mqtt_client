@@ -1,7 +1,7 @@
 import time
 import logging
 
-from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException, set_compatible_event_loop_policy
+from gf_mqtt_client import SyncMQTTClient, SyncResponseHandlerBase, MQTTBrokerConfig, ResponseException
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -16,11 +16,8 @@ BROKER_CONFIG = MQTTBrokerConfig(
 REQUESTOR_TAG = "2D_XX_0_9998"
 TARGET_DEVICE_TAG = "2D_XX_0_9999"
 
-# This ensures compatibility with asyncio and aiomqtt on Windows on modern Python versions.
-set_compatible_event_loop_policy()
-
-# Request handler that processes incoming requests and sends a response.
-async def response_handler(client: SyncMQTTClient, topic: str, payload: dict) -> dict:
+# Response handler that processes incoming responses.
+def response_handler(client: SyncMQTTClient, topic: str, payload: dict) -> dict:
 
     logging.info(f"{client.identifier} Received response for request ID {payload['header']['request_id']} on topic {topic}")
 
@@ -35,7 +32,7 @@ def create_mqtt_client():
     )
     # Add the custom response handler for debugging responses
     client.add_message_handler(
-        ResponseHandlerBase(process=response_handler, propagate=False)
+        SyncResponseHandlerBase(process=response_handler, propagate=False)
     )
     return client.connect()
 

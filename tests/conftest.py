@@ -14,7 +14,7 @@ from gf_mqtt_client import (
     set_compatible_event_loop_policy,
     reset_event_loop_policy,
 )
-from .mock_device import MockMQTTDevice
+from .integration.mock_device import MockMQTTDevice
 
 # === Load Environment and Configure Logging ===
 load_dotenv()

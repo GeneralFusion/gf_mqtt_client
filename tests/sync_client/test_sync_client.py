@@ -4,9 +4,14 @@ import copy
 import concurrent.futures
 from datetime import datetime
 
-from gf_mqtt_client.models import ResponseCode, Method
-from gf_mqtt_client.exceptions import GatewayTimeoutResponse, NotFoundResponse
-from gf_mqtt_client.message_handler import ResponseHandlerBase, MessageHandlerBase
+from gf_mqtt_client import (
+    ResponseCode,
+    Method,
+    GatewayTimeoutResponse,
+    NotFoundResponse,
+    SyncResponseHandlerBase,
+    SyncMessageHandlerBase,
+)
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
@@ -86,25 +91,25 @@ def test_sync_concurrent_requests_stress(requestor, responder):
 
 def test_sync_multiple_handlers(requestor, responder):
 
-    # logging handler
-    async def logging_handler(client, topic, payload):
+    # logging handler (sync - no async/await)
+    def logging_handler(client, topic, payload):
         print("LOGGING:", payload)
         return None
 
-    # response handler
-    async def response_handler(client, topic, payload):
+    # response handler (sync - no async/await)
+    def response_handler(client, topic, payload):
         print("RESPONSE:", payload)
         return payload
 
     requestor.add_message_handler(
-        MessageHandlerBase(
+        SyncMessageHandlerBase(
             can_handle=lambda c,t,p: True,
             process=logging_handler,
             propagate=True
         )
     )
     requestor.add_message_handler(
-        MessageHandlerBase(
+        SyncMessageHandlerBase(
             can_handle=lambda c,t,p: "response_code" in p.get("header", {}),
             process=response_handler,
             propagate=False
@@ -124,12 +129,12 @@ def test_sync_multiple_handlers(requestor, responder):
 
 def test_sync_default_handler(requestor, responder):
 
-    # a handler that never matches
-    def no_op(payload):
+    # a handler that never matches (sync - no async/await)
+    def no_op(client, topic, payload):
         return None
 
     requestor.add_message_handler(
-        MessageHandlerBase(
+        SyncMessageHandlerBase(
             can_handle=lambda c, t, p: False,
             process=no_op,
             propagate=True
@@ -173,12 +178,12 @@ def test_sync_put_success(requestor, responder):
 
 def test_sync_request_bad_request_exception(requestor, responder):
 
-    # inject a ResponseHandlerBase that raises on NOT_FOUND
+    # inject a SyncResponseHandlerBase that raises on NOT_FOUND (sync - no async/await)
     def raise_handler(client, topic, payload):
         return payload
 
     requestor.add_message_handler(
-        ResponseHandlerBase(
+        SyncResponseHandlerBase(
             process=raise_handler,
             propagate=False,
             raise_exceptions=True
@@ -195,11 +200,12 @@ def test_sync_request_bad_request_exception(requestor, responder):
 
 
 def test_sync_request_unauthorized_response(requestor, responder):
+    # sync handler - no async/await
     def raise_handler(client, topic, payload):
         return payload
 
     requestor.add_message_handler(
-        ResponseHandlerBase(
+        SyncResponseHandlerBase(
             process=raise_handler,
             propagate=False,
             raise_exceptions=True

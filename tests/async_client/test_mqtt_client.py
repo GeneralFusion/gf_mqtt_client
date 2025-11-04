@@ -4,12 +4,25 @@ import pytest
 import asyncio
 from datetime import datetime
 
-from gf_mqtt_client.exceptions import NotFoundResponse, GatewayTimeoutResponse
-from gf_mqtt_client.message_handler import ResponseHandlerBase
-from gf_mqtt_client.models import Method
-from gf_mqtt_client.mqtt_client import MessageHandlerBase
-from gf_mqtt_client.payload_handler import ResponseCode
-from gf_mqtt_client.exceptions import *
+from gf_mqtt_client import (
+    NotFoundResponse,
+    GatewayTimeoutResponse,
+    BadOptionResponse,
+    ForbiddenResponse,
+    NotAcceptableResponse,
+    PreconditionFailedResponse,
+    RequestEntityTooLargeResponse,
+    UnsupportedContentFormatResponse,
+    NotImplementedResponse,
+    BadGatewayResponse,
+    ServiceUnavailableResponse,
+    ProxyingNotSupportedResponse,
+    ResponseHandlerBase,
+    Method,
+    MessageHandlerBase,
+    ResponseCode,
+    ResponseException,
+)
 
 TOPIC_SUBSYSTEM = "axuv"
 TOPIC_PATH = "gains"
@@ -150,7 +163,7 @@ async def test_put_success(responder, requester):
 async def test_request_bad_request_exception(responder, requester):
 
     # Use a custom handler that raises exceptions
-    from gf_mqtt_client.message_handler import ResponseHandlerBase
+    from gf_mqtt_client import ResponseHandlerBase
 
     async def exception_raising_handler(client, topic, payload):
         return payload  # it will raise via handle_response_with_exception

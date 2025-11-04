@@ -1,5 +1,5 @@
 import pytest
-from gf_mqtt_client.payload_handler import PayloadHandler, Method, ResponseCode
+from gf_mqtt_client import PayloadHandler, Method, ResponseCode
 
 def test_create_general_payload():
     handler = PayloadHandler()

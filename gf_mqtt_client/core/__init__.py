@@ -1,10 +1,19 @@
-# Core components
-from .core import (
-    MQTTClientBase,
+"""
+Core components shared by both async and sync MQTT clients.
+"""
+from .base import MQTTClientBase, parse_method, MessageLogger, ClientFormatter
+from .models import (
     MQTTBrokerConfig,
     Method,
     ResponseCode,
     MessageType,
+    RequestPayload,
+    ResponsePayload,
+    GeneralPayload,
+    HeaderRequest,
+    HeaderResponse,
+)
+from .exceptions import (
     ResponseException,
     BadRequestResponse,
     UnauthorizedResponse,
@@ -22,39 +31,32 @@ from .core import (
     ServiceUnavailableResponse,
     GatewayTimeoutResponse,
     ProxyingNotSupportedResponse,
-    TopicManager,
-    PayloadHandler,
 )
-
-# Async client and handlers
-from .async_client import (
-    MQTTClient,
-    ensure_compatible_event_loop_policy,
-    set_compatible_event_loop_policy,
-    configure_asyncio_compatibility,
-    reset_event_loop_policy,
-    MessageHandlerProtocol,
-    MessageHandlerBase,
-    RequestHandlerBase,
-    ResponseHandlerBase,
+# Message handler utilities (shared between async and sync)
+from .message_handler import (
+    RESPONSE_CODE_EXCEPTION_MAP,
+    handle_response_with_exception,
 )
-
-# Sync client and handlers
-from .sync_client import (
-    SyncMQTTClient,
-    SyncMessageHandlerProtocol,
-    SyncMessageHandlerBase,
-    SyncRequestHandlerBase,
-    SyncResponseHandlerBase,
-)
+from .payload_handler import PayloadHandler
+from .topic_manager import TopicManager
+from . import protocol_utils
 
 __all__ = [
-    # Core
+    # Base classes
     "MQTTClientBase",
+    "parse_method",
+    "MessageLogger",
+    "ClientFormatter",
+    # Models
     "MQTTBrokerConfig",
     "Method",
     "ResponseCode",
     "MessageType",
+    "RequestPayload",
+    "ResponsePayload",
+    "GeneralPayload",
+    "HeaderRequest",
+    "HeaderResponse",
     # Exceptions
     "ResponseException",
     "BadRequestResponse",
@@ -73,25 +75,11 @@ __all__ = [
     "ServiceUnavailableResponse",
     "GatewayTimeoutResponse",
     "ProxyingNotSupportedResponse",
-    # Message handlers (async)
-    "MessageHandlerProtocol",
-    "MessageHandlerBase",
-    "RequestHandlerBase",
-    "ResponseHandlerBase",
-    # Message handlers (sync)
-    "SyncMessageHandlerProtocol",
-    "SyncMessageHandlerBase",
-    "SyncRequestHandlerBase",
-    "SyncResponseHandlerBase",
+    # Message handler utilities
+    "RESPONSE_CODE_EXCEPTION_MAP",
+    "handle_response_with_exception",
     # Utilities
-    "TopicManager",
     "PayloadHandler",
-    # Async client
-    "MQTTClient",
-    "ensure_compatible_event_loop_policy",
-    "set_compatible_event_loop_policy",
-    "configure_asyncio_compatibility",
-    "reset_event_loop_policy",
-    # Sync client
-    "SyncMQTTClient",
+    "TopicManager",
+    "protocol_utils",
 ]

@@ -1,6 +1,15 @@
-# MQTT CoAP Module Documentation
+# GF MQTT Client
 
-This module provides a Python-based implementation for MQTT communication inspired by the CoAP protocol, designed for asynchronous operations and potential microcontroller compatibility (e.g., Arduino). It includes a flexible payload structure to support general messaging and a get-request interaction model.
+A Python client library for MQTT communication inspired by the CoAP protocol. This library provides both asynchronous and synchronous interfaces for building robust MQTT-based applications with a request-response pattern, designed for IoT device communication and microcontroller compatibility.
+
+## Features
+
+- **Dual API**: Full async/await support with `MQTTClient` and blocking operations with `SyncMQTTClient`
+- **CoAP-inspired Protocol**: Request-response messaging pattern over MQTT with typed payloads
+- **Type Safety**: Pydantic-based payload validation and type checking
+- **Extensible Handlers**: Customizable request and response processing pipelines
+- **Exception Hierarchy**: Rich error handling with CoAP-style response codes
+- **Cross-platform**: Windows asyncio compatibility handling included
 
 ## Python Compatibility
 This library has been tested on:
@@ -10,13 +19,99 @@ This library has been tested on:
 
 It is currently not compatible with Python <3.11 or >3.13
 
+## Installation
+
+```bash
+pip install gf-mqtt-client
+```
+
+Or with uv:
+```bash
+uv add gf-mqtt-client
+```
+
+## Project Structure
+
+The library is organized into three main modules:
+
+- **`gf_mqtt_client.core`**: Core protocol components
+  - Models (payloads, enums)
+  - Exceptions hierarchy
+  - Protocol utilities
+  - Topic management
+  - Payload handling and validation
+
+- **`gf_mqtt_client.async_client`**: Asynchronous client implementation
+  - `MQTTClient` - Full async/await support
+  - Async message handlers
+  - Asyncio compatibility utilities
+
+- **`gf_mqtt_client.sync_client`**: Synchronous client wrapper
+  - `SyncMQTTClient` - Blocking API
+  - Sync message handlers
+
+All public APIs are available from the top-level `gf_mqtt_client` package for convenient importing.
+
+## Quick Start
+
+### Async Client
+```python
+from gf_mqtt_client import MQTTClient, configure_asyncio_compatibility
+import asyncio
+
+# Configure for Windows compatibility
+configure_asyncio_compatibility()
+
+async def main():
+    client = MQTTClient(broker="broker.emqx.io", port=1883, identifier="my_device")
+    await client.connect()
+
+    # Send a request
+    response = await client.request(
+        target_device_tag="target_device",
+        subsystem="example",
+        path="resource"
+    )
+    print(response)
+
+    await client.disconnect()
+
+asyncio.run(main())
+```
+
+### Sync Client
+```python
+from gf_mqtt_client import SyncMQTTClient
+
+client = SyncMQTTClient(broker="broker.emqx.io", port=1883, identifier="my_device")
+client.connect()
+
+# Send a blocking request
+response = client.request(
+    target_device_tag="target_device",
+    subsystem="example",
+    path="resource"
+)
+print(response)
+
+client.disconnect()
+```
+
 ## Asyncio Compatibility
 
-Starting in Python 3.8, Windows switched its default loop policy to `WindowsProactorEventLoopPolicy`, which is incompatible with some third-party libraries (such as `paho-mqtt`, which depends on add_reader support). This library includes a module to manage asyncio compatibility - [asyncio_compatibility.py](https://github.com/generalmattza/gf_mqtt_client/blob/main/src/gf_mqtt_client/asyncio_compatibility.py), which allows developers to detect, warn about, or automatically correct such incompatibilities by setting the safer `WindowsSelectorEventLoopPolicy` when needed.
+Starting in Python 3.8, Windows switched its default loop policy to `WindowsProactorEventLoopPolicy`, which is incompatible with some third-party libraries (such as `paho-mqtt`, which depends on `add_reader` support). This library includes utilities to manage asyncio compatibility, allowing developers to detect, warn about, or automatically correct such incompatibilities by setting the safer `WindowsSelectorEventLoopPolicy` when needed.
 
-To enable compatibility mode, set environment variable `ASYNCIO_COMPATIBILITY_MODE=True` and call `configure_asyncio_compatibility()` early in your application. This will ensure that the correct loop policy is used when needed. Compatibility mode can prevent subtle runtime errors caused by mismatched event loop behavior. 
+To enable compatibility mode, set environment variable `ASYNCIO_COMPATIBILITY_MODE=True` and call `configure_asyncio_compatibility()` early in your application:
 
-When an MQTTClient object is initialized, `ensure_compatible_event_loop_policy()` is run, which will generate a warning if compatibility mode is not set. To disable this warning, set environment variable `SUPPRESS_ASYNCIO_WARNINGS=True`
+```python
+from gf_mqtt_client import configure_asyncio_compatibility
+
+configure_asyncio_compatibility()
+```
+
+This will ensure that the correct loop policy is used when needed. Compatibility mode can prevent subtle runtime errors caused by mismatched event loop behavior.
+
+When an `MQTTClient` object is initialized, `ensure_compatible_event_loop_policy()` is run, which will generate a warning if compatibility mode is not set. To disable this warning, set environment variable `SUPPRESS_ASYNCIO_WARNINGS=True`
 
 ## Payload Structure
 
@@ -162,7 +257,8 @@ Both the async and sync clients let you plug in custom logic before and after re
 Before sending a request or when receiving an incoming message, you can intercept and modify the payload or implement side‑effects by registering a `RequestHandlerBase`:
 
 ```python
-from gf_mqtt_client.message_handler import RequestHandlerBase
+from gf_mqtt_client import RequestHandlerBase
+import time
 
 async def my_request_interceptor(client, topic: str, payload: dict) -> dict:
     # e.g. add a timestamp header or log the outgoing request
@@ -184,8 +280,7 @@ Use `propagate=False` to stop further handlers from running after yours.
 To handle responses centrally—log codes, raise on errors, or transform the body—use a `ResponseHandlerBase`:
 
 ```python
-from gf_mqtt_client.message_handler import ResponseHandlerBase
-from gf_mqtt_client.exceptions import NotFoundResponse
+from gf_mqtt_client import ResponseHandlerBase, ResponseCode, NotFoundResponse
 
 async def my_response_handler(client, topic: str, payload: dict) -> dict:
     code = payload["header"]["response_code"]
@@ -204,16 +299,26 @@ await mqtt_client.add_message_handler(
 )
 ```
 
-### Customizing the Sync Wrapper
+### Customizing the Sync Client
 
-The sync client exposes the same handler API (blocking under the hood). Just pass your async handlers into `add_message_handler`, and they’ll run in the background loop:
+The sync client uses **synchronous handlers** (not async). Use the `Sync*` variants of handler classes:
 
 ```python
+from gf_mqtt_client import SyncMQTTClient, SyncResponseHandlerBase
+
+def my_sync_response_handler(client, topic: str, payload: dict) -> dict:
+    # Regular synchronous function, not async
+    print(f"Received response on {topic}")
+    return payload
+
 client = SyncMQTTClient(...)
-# Handlers are added in the same way:
-client.add_message_handler(ResponseHandlerBase(process=my_response_handler, propagate=False))
+client.add_message_handler(
+    SyncResponseHandlerBase(process=my_sync_response_handler, propagate=False)
+)
 client.connect()
 ```
+
+**Note:** The sync client runs the async client in a background thread, but your handlers must be regular synchronous functions, not async functions.
 
 ### Handler Ordering and Propagation
 
@@ -243,11 +348,17 @@ import asyncio
 import time
 import logging
 
-from gf_mqtt_client.mqtt_client import MQTTClient
-from gf_mqtt_client.message_handler import RequestHandlerBase
-from gf_mqtt_client.topic_manager import TopicManager
+from gf_mqtt_client import (
+    MQTTClient,
+    RequestHandlerBase,
+    TopicManager,
+    configure_asyncio_compatibility
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Configure asyncio compatibility for Windows
+configure_asyncio_compatibility()
 
 PUBLIC_BROKER = "broker.emqx.io"
 PUBLIC_PORT = 1883
@@ -265,7 +376,7 @@ async def request_handler(client: MQTTClient, topic: str, payload: dict) -> dict
         "body": [0, 1, 2, 3, 4],
         "timestamp": str(int(time.time() * 1000)),
     }
-    print(f"[Responder] Responding to {payload['header']['request_id']}")
+    logging.info(f"[Responder] Responding to {payload['header']['request_id']}")
     response_topic = TopicManager().build_response_topic(request_topic=topic)
     await client.publish(response_topic, response)
     return response
@@ -278,17 +389,23 @@ async def main():
         identifier=DEVICE_TAG
     )
     # Register request handler
-    await client.add_message_handler(RequestHandlerBase(process=request_handler, propagate=False))
+    await client.add_message_handler(
+        RequestHandlerBase(process=request_handler, propagate=False)
+    )
     await client.connect()
 
     try:
-        print(f"Connected as {DEVICE_TAG}, sending GET to itself every 2s...")
+        logging.info(f"Connected as {DEVICE_TAG}, sending GET to itself every 2s...")
         while True:
-            resp = await client.request(target_device_tag=DEVICE_TAG, subsystem="example", path="mock")
-            print(f"Received: {resp}")
+            resp = await client.request(
+                target_device_tag=DEVICE_TAG,
+                subsystem="example",
+                path="mock"
+            )
+            logging.info(f"Received: {resp}")
             await asyncio.sleep(2)
     except KeyboardInterrupt:
-        print("Exiting...")
+        logging.info("Exiting...")
     finally:
         await client.disconnect()
 
@@ -303,11 +420,15 @@ if __name__ == "__main__":
 The sync wrapper runs the async client in a background thread, exposing blocking methods:
 
 ```python
-# main_sync.py
 import time
 import logging
 
-from gf_mqtt_client import SyncMQTTClient, ResponseHandlerBase, MQTTBrokerConfig, ResponseException
+from gf_mqtt_client import (
+    SyncMQTTClient,
+    SyncResponseHandlerBase,
+    MQTTBrokerConfig,
+    ResponseException
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -321,8 +442,8 @@ BROKER_CONFIG = MQTTBrokerConfig(
 REQUESTOR_TAG = "2D_XX_0_9998"
 TARGET_DEVICE_TAG = "2D_XX_0_9999"
 
-# Example response handler for debugging
-async def response_handler(client, topic: str, payload: dict) -> dict:
+# Example response handler for debugging (synchronous function, not async)
+def response_handler(client, topic: str, payload: dict) -> dict:
     logging.info(f"{client.identifier} got response {payload['header']['request_id']} on {topic}")
     return payload
 
@@ -335,15 +456,21 @@ if __name__ == "__main__":
         username=BROKER_CONFIG.username,
         password=BROKER_CONFIG.password
     )
-    # Attach handler
-    client.add_message_handler(ResponseHandlerBase(process=response_handler, propagate=False))
+    # Attach handler using SyncResponseHandlerBase
+    client.add_message_handler(
+        SyncResponseHandlerBase(process=response_handler, propagate=False)
+    )
     client.connect()
 
     try:
         logging.info(f"Connected as {REQUESTOR_TAG}, polling every 2s...")
         while True:
             try:
-                resp = client.request(target_device_tag=TARGET_DEVICE_TAG, subsystem="axuv", path="gains")
+                resp = client.request(
+                    target_device_tag=TARGET_DEVICE_TAG,
+                    subsystem="axuv",
+                    path="gains"
+                )
                 logging.info(f"Received: {resp}")
             except ResponseException as e:
                 logging.error(f"Protocol error: {e}")

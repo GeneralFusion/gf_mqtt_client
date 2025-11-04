@@ -4,8 +4,8 @@ import time
 from pydantic_core import ValidationError
 import pytest
 from gf_mqtt_client import MQTTClient
-from tests.axuv.conftest import SUBSYSTEM
-from tests.axuv.data_model import DataPayload
+from tests.integration.axuv.conftest import SUBSYSTEM
+from tests.integration.axuv.data_model import DataPayload
 
 def arm_device_via_request(source: MQTTClient, target: MQTTClient):
     """Helper function to arm the device via a request."""

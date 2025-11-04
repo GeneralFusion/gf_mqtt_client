@@ -1,5 +1,5 @@
 import pytest
-from gf_mqtt_client.topic_manager import TopicManager
+from gf_mqtt_client import TopicManager
 
 def test_build_request_topic():
     tm = TopicManager(namespace="gf_int_v1")

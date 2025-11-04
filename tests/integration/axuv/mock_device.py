@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List
 
 from pydantic import BaseModel
-from gf_mqtt_client.models import ResponseCode, Method
+from gf_mqtt_client import ResponseCode, Method
 
 
 class MetricProperties(BaseModel):
