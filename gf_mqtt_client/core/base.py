@@ -25,7 +25,7 @@ for async (aiomqtt) and sync (paho-mqtt) operations.
 import uuid
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Self
+from typing import Any
 from pydantic import SecretStr
 
 from .models import Method
@@ -62,8 +62,10 @@ class ClientFormatter(logging.Formatter):
         Returns:
             Formatted log message string with extra fields appended
         """
-        if hasattr(record, 'extra') and isinstance(record.extra, dict):
-            extra_info = ' '.join(f"{k}={v}" for k, v in record.extra.items())
+        # Check if extra attribute exists (dynamically added by LoggerAdapter)
+        extra = getattr(record, 'extra', None)
+        if extra and isinstance(extra, dict):
+            extra_info = ' '.join(f"{k}={v}" for k, v in extra.items())
             return f"{record.msg} {extra_info}"
         return super().format(record)
 
@@ -115,7 +117,7 @@ class MessageLogger(logging.LoggerAdapter):
         self.merge_extra = merge_extra
         self.exclude_extras = exclude_extras or []
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         """
         Process the logging call to inject and manage extra context fields.
 
@@ -130,14 +132,21 @@ class MessageLogger(logging.LoggerAdapter):
         Returns:
             Tuple of (message, modified_kwargs) ready for the underlying logger
         """
+        # Create a mutable copy of extra fields
+        base_extra = dict(self.extra) if self.extra else {}
+
         # Merge or replace extra fields based on configuration
         if self.merge_extra and "extra" in kwargs:
-            kwargs["extra"] = {**self.extra, **kwargs["extra"]}
+            call_extra = kwargs.get("extra", {})
+            if isinstance(call_extra, dict):
+                kwargs["extra"] = {**base_extra, **call_extra}
+            else:
+                kwargs["extra"] = base_extra
         else:
-            kwargs["extra"] = self.extra
+            kwargs["extra"] = base_extra
 
         # Apply exclusion filters to remove unwanted fields
-        if self.exclude_extras:
+        if self.exclude_extras and isinstance(kwargs.get("extra"), dict):
             for key in self.exclude_extras:
                 kwargs["extra"].pop(key, None)
 
@@ -313,36 +322,78 @@ class MQTTClientBase(ABC):
         )
 
     def set_credentials(self, username: str, password: str | SecretStr):
-        """Set MQTT authentication credentials."""
+        """
+        Set MQTT broker authentication credentials.
+
+        Updates the stored username and password for MQTT broker authentication.
+        These credentials will be used during the next connection attempt.
+
+        Args:
+            username: MQTT broker username
+            password: MQTT broker password (will be securely stored)
+
+        Note:
+            Credentials must be set before calling connect() if the broker
+            requires authentication. Password is never logged in plain text.
+        """
         self._username = username
         self._password = password
-        self.logger.debug(
-            "Credentials set for username",
-            extra={"username": username, "password": "***"},
+        self.logger.info(
+            f"MQTT credentials updated for user '{username}'. Changes will apply on next connection.",
+            extra={"username": username},
         )
 
     def generate_request_id(self) -> str:
-        """Generate a unique request ID."""
+        """
+        Generate a unique request ID for request-response correlation.
+
+        Creates a UUID4-based identifier used to correlate requests with their
+        corresponding responses in the MQTT request-response pattern.
+
+        Returns:
+            Unique request ID string (UUID4 format)
+
+        Example:
+            >>> request_id = self.generate_request_id()
+            >>> # Use in request payload header
+        """
         return str(uuid.uuid4())
 
     def _truncate_str(self, input_string: str, output_length: int = 50) -> str:
         """
         Truncate a string to specified length, appending '...' if truncated.
 
+        This utility method safely truncates strings for logging purposes, ensuring
+        that large payloads or long identifiers don't clutter log output. Non-string
+        inputs are automatically converted to strings when possible.
+
         Args:
-            input_string: String to truncate
-            output_length: Maximum length
+            input_string: String to truncate (will attempt string conversion if not str)
+            output_length: Maximum length before truncation (default: 50)
 
         Returns:
-            Truncated string
+            Truncated string with '...' appended if original exceeded output_length,
+            or original string if conversion fails
+
+        Example:
+            >>> self._truncate_str("This is a very long string...", 10)
+            "This is a ..."
         """
+        # Attempt to convert non-string inputs to strings
         if not isinstance(input_string, str):
             try:
                 input_string = str(input_string)
-            except Exception:
+            except Exception as e:
+                # Log conversion failure and return original value
+                self.logger.warning(
+                    f"Failed to convert {type(input_string).__name__} to string for truncation: {e}"
+                )
                 return input_string
+
+        # Truncate if string exceeds maximum length
         if len(input_string) > output_length:
             return input_string[:output_length] + "..."
+
         return input_string
 
     def _extract_extras(
@@ -352,19 +403,44 @@ class MQTTClientBase(ABC):
         extra_extras: dict | None = None
     ) -> dict:
         """
-        Extract extra information from the payload for logging.
+        Extract structured logging context from an MQTT message payload.
+
+        This method parses message payloads to extract key contextual information
+        for logging, including request IDs, paths, response codes, and message types.
+        It automatically determines whether a message is a request, response, or
+        general message based on header contents.
 
         Args:
-            payload: Message payload dictionary
-            max_len: Maximum length for string values
-            extra_extras: Additional extras to merge
+            payload: Message payload dictionary containing header and body
+            max_len: Maximum length for string values before truncation (default: 50)
+            extra_extras: Additional context fields to merge into the result
 
         Returns:
-            Dictionary of extracted fields for logging context
+            Dictionary of extracted context fields suitable for logger.extra parameter.
+            Fields may include: source, target, request_id, correlation_id, path,
+            message_type, response_code (None values are filtered out)
+
+        Raises:
+            AssertionError: If max_len is not positive
+
+        Example:
+            >>> extras = self._extract_extras({
+            ...     "header": {"request_id": "abc-123", "path": "/sensor/temp"},
+            ...     "body": {"value": 23.5}
+            ... })
+            >>> logger.info("Message received", extra=extras)
         """
         from .models import MessageType
 
         def _determine_message_type(payload: dict) -> str | None:
+            """
+            Determine message type by inspecting header fields.
+
+            Returns:
+                MessageType.REQUEST if header contains 'method'
+                MessageType.RESPONSE if header contains 'response_code'
+                MessageType.UNKNOWN otherwise
+            """
             if "header" in payload and "method" in payload["header"]:
                 return MessageType.REQUEST.value
             if "header" in payload and "response_code" in payload["header"]:
@@ -373,6 +449,7 @@ class MQTTClientBase(ABC):
 
         assert max_len > 0, "max_len must be greater than 0"
 
+        # Extract header fields with safe defaults
         header = payload.get("header", {})
         source = header.get("source", "unknown")
         target = header.get("target", "unknown")
@@ -382,6 +459,7 @@ class MQTTClientBase(ABC):
         response_code = header.get("response_code", None)
         message_type = _determine_message_type(payload)
 
+        # Build context dictionary
         extra_new = {}
         extra_new["source"] = source
         extra_new["target"] = target
@@ -391,14 +469,15 @@ class MQTTClientBase(ABC):
         extra_new["message_type"] = message_type
         extra_new["response_code"] = response_code
 
-        # Post-processing of extra fields - truncate strings
+        # Post-processing: Truncate long string values for readability
         for k, v in extra_new.items():
             if isinstance(v, str) and len(v) > max_len:
                 extra_new[k] = self._truncate_str(v, output_length=max_len)
 
-        # Remove keys with None values
+        # Remove keys with None values to keep logs clean
         extra_new = {k: v for k, v in extra_new.items() if v is not None}
 
+        # Merge with any additional context provided
         return {**extra_new, **(extra_extras or {})}
 
     # Abstract methods that subclasses must implement

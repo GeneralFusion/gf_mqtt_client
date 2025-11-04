@@ -15,7 +15,7 @@ A Python client library for MQTT communication inspired by the CoAP protocol. Th
 This library has been tested on:
   - 3.11.9
   - 3.12.8
-  - 3.13.5
+  - 3.13.8
 
 It is currently not compatible with Python <3.11 or >3.13
 
@@ -492,6 +492,81 @@ if __name__ == "__main__":
   * `create_response_payload(response_code, path, request_id, body, correlation_id=None)`
   * `validate_payload(payload)` to check payload structure
   * `parse_payload(json_string)` to parse and validate JSON strings
+
+---
+
+## Available Imports
+
+All public APIs can be imported from the top-level `gf_mqtt_client` package:
+
+**Core Components:**
+```python
+from gf_mqtt_client import (
+    # Base classes
+    MQTTClientBase,
+    MQTTBrokerConfig,
+
+    # Enums
+    Method,
+    ResponseCode,
+    MessageType,
+
+    # Utilities
+    TopicManager,
+    PayloadHandler,
+)
+```
+
+**Async Client:**
+```python
+from gf_mqtt_client import (
+    MQTTClient,
+    MessageHandlerProtocol,
+    MessageHandlerBase,
+    RequestHandlerBase,
+    ResponseHandlerBase,
+
+    # Asyncio compatibility
+    configure_asyncio_compatibility,
+    ensure_compatible_event_loop_policy,
+    set_compatible_event_loop_policy,
+    reset_event_loop_policy,
+)
+```
+
+**Sync Client:**
+```python
+from gf_mqtt_client import (
+    SyncMQTTClient,
+    SyncMessageHandlerProtocol,
+    SyncMessageHandlerBase,
+    SyncRequestHandlerBase,
+    SyncResponseHandlerBase,
+)
+```
+
+**Exceptions:**
+```python
+from gf_mqtt_client import (
+    ResponseException,
+    BadRequestResponse,
+    UnauthorizedResponse,
+    BadOptionResponse,
+    ForbiddenResponse,
+    NotFoundResponse,
+    MethodNotAllowedResponse,
+    NotAcceptableResponse,
+    PreconditionFailedResponse,
+    RequestEntityTooLargeResponse,
+    UnsupportedContentFormatResponse,
+    InternalServerErrorResponse,
+    NotImplementedResponse,
+    BadGatewayResponse,
+    ServiceUnavailableResponse,
+    GatewayTimeoutResponse,
+    ProxyingNotSupportedResponse,
+)
+```
 
 ---
 

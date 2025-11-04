@@ -178,3 +178,5 @@ cython_debug/
 
 local_test.py
 uv.lock
+
+nul

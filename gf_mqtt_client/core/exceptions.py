@@ -1,3 +1,46 @@
+"""
+Exception Hierarchy for MQTT Response Errors.
+
+This module defines a comprehensive exception hierarchy for handling errors in the
+MQTT request-response protocol. All exceptions inherit from ResponseException and
+map to specific CoAP response codes (4xx client errors, 5xx server errors).
+
+Exception Hierarchy:
+    ResponseException (Base)
+    ├── Client Errors (4xx)
+    │   ├── BadRequestResponse (400)
+    │   ├── UnauthorizedResponse (401)
+    │   ├── BadOptionResponse (402)
+    │   ├── ForbiddenResponse (403)
+    │   ├── NotFoundResponse (404)
+    │   ├── MethodNotAllowedResponse (405)
+    │   ├── NotAcceptableResponse (406)
+    │   ├── PreconditionFailedResponse (412)
+    │   ├── RequestEntityTooLargeResponse (413)
+    │   └── UnsupportedContentFormatResponse (415)
+    └── Server Errors (5xx)
+        ├── InternalServerErrorResponse (500)
+        ├── NotImplementedResponse (501)
+        ├── BadGatewayResponse (502)
+        ├── ServiceUnavailableResponse (503)
+        ├── GatewayTimeoutResponse (504)
+        └── ProxyingNotSupportedResponse (505)
+
+Usage:
+    These exceptions are automatically raised by response handlers when error
+    codes are detected in response payloads. Each exception carries contextual
+    information including response code, path, detail message, source, and target.
+
+Example:
+    >>> try:
+    ...     response = await client.request("device-001", "sensors", "/temp")
+    ... except NotFoundResponse as e:
+    ...     print(f"Resource not found: {e.path} on {e.target}")
+    ...     print(f"Error detail: {e.detail}")
+    ... except InternalServerErrorResponse as e:
+    ...     print(f"Server error: {e.detail}")
+    ...     # Implement retry logic
+"""
 from typing import Optional
 
 
