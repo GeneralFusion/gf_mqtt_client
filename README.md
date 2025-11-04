@@ -15,7 +15,7 @@ A Python client library for MQTT communication inspired by the CoAP protocol. Th
 This library has been tested on:
   - 3.11.9
   - 3.12.8
-  - 3.13.8
+  - 3.13.9
 
 It is currently not compatible with Python <3.11 or >3.13
 
