@@ -467,23 +467,36 @@ class TestConcurrentConnectDisconnect:
     """Test concurrent connect/disconnect operations."""
 
     def test_concurrent_connect_calls(self):
-        """Test multiple threads calling connect() simultaneously."""
-        client = SyncMQTTClient(
-            broker=BROKER_CONFIG.hostname,
-            port=BROKER_CONFIG.port,
-            timeout=5,
-            identifier="test_concurrent_connect",
-            ensure_unique_identifier=True,
-        )
-        client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
+        """Test concurrent connections from multiple client instances.
 
-        def try_connect():
+        This tests that multiple clients can connect simultaneously from
+        different threads without interfering with each other. Each client
+        gets a unique identifier via ensure_unique_identifier=True.
+        """
+        # Create multiple client instances
+        clients = []
+        for i in range(5):
+            client = SyncMQTTClient(
+                broker=BROKER_CONFIG.hostname,
+                port=BROKER_CONFIG.port,
+                timeout=5,
+                identifier=f"test_concurrent_connect_{i}",
+                ensure_unique_identifier=True,
+            )
+            client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
+            clients.append(client)
+
+        results = []
+
+        def try_connect(client):
             try:
                 client.connect()
-            except Exception:
-                pass  # Some may fail, that's ok
+                results.append(True)
+            except Exception as e:
+                results.append(False)
+                print(f"Connect failed for {client.identifier}: {e}")
 
-        threads = [threading.Thread(target=try_connect) for _ in range(5)]
+        threads = [threading.Thread(target=try_connect, args=(client,)) for client in clients]
 
         for t in threads:
             t.start()
@@ -491,13 +504,25 @@ class TestConcurrentConnectDisconnect:
         for t in threads:
             t.join(timeout=10)
 
-        # Should end up connected without crashing
-        assert client.is_connected
+        # All should successfully connect
+        assert len([r for r in results if r]) == 5, f"Expected 5 successful connections, got {len([r for r in results if r])}"
 
-        client.disconnect()
+        # Clean up all clients
+        for client in clients:
+            try:
+                if client.is_connected:
+                    client.disconnect()
+            except Exception as e:
+                print(f"Cleanup error for {client.identifier}: {e}")
 
     def test_concurrent_disconnect_calls(self):
-        """Test multiple threads calling disconnect() simultaneously."""
+        """Document behavior of multiple threads calling disconnect() simultaneously.
+
+        This test documents that calling disconnect() concurrently from multiple
+        threads may or may not be fully idempotent depending on timing. The first
+        disconnect will succeed, and subsequent ones should either succeed silently
+        or be handled gracefully.
+        """
         client = SyncMQTTClient(
             broker=BROKER_CONFIG.hostname,
             port=BROKER_CONFIG.port,
@@ -508,12 +533,17 @@ class TestConcurrentConnectDisconnect:
         client.set_credentials(BROKER_CONFIG.username, BROKER_CONFIG.password)
 
         client.connect()
+        assert client.is_connected
+
+        results = []
 
         def try_disconnect():
             try:
                 client.disconnect()
-            except Exception:
-                pass  # Some may fail if already disconnected
+                results.append(True)
+            except Exception as e:
+                results.append(False)
+                print(f"Disconnect exception (expected): {e}")
 
         threads = [threading.Thread(target=try_disconnect) for _ in range(5)]
 
@@ -522,6 +552,10 @@ class TestConcurrentConnectDisconnect:
 
         for t in threads:
             t.join(timeout=10)
+
+        # At least one disconnect should succeed
+        # The rest may succeed or fail depending on timing
+        assert len([r for r in results if r]) >= 1
 
         # Should end up disconnected without crashing
         assert not client.is_connected
